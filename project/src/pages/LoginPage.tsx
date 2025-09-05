@@ -4,11 +4,11 @@ import { Camera, Mail, Lock, User, Building, Shield } from 'lucide-react';
 import { useAuth, UserType } from '../contexts/AuthContext';
 
 type ColorKey = 'blue' | 'green' | 'purple';
-const COLOR = {
-  blue:   { border: 'border-indigo-500',   bgFrom: 'from-indigo-50',   bgTo: 'to-indigo-100',   text: 'text-indigo-600',   heading: 'text-indigo-900' },
-  green:  { border: 'border-emerald-500',  bgFrom: 'from-emerald-50',  bgTo: 'to-emerald-100',  text: 'text-emerald-600',  heading: 'text-emerald-900' },
-  purple: { border: 'border-violet-500',   bgFrom: 'from-violet-50',   bgTo: 'to-violet-100',   text: 'text-violet-600',   heading: 'text-violet-900' },
-} as const;
+const COLOR: Record<ColorKey, { border: string; bgFrom: string; bgTo: string; text: string; heading: string }> = {
+  blue:   { border: 'border-indigo-500', bgFrom: 'from-indigo-50', bgTo: 'to-indigo-100', text: 'text-indigo-600', heading: 'text-indigo-900' },
+  green:  { border: 'border-emerald-500', bgFrom: 'from-emerald-50', bgTo: 'to-emerald-100', text: 'text-emerald-600', heading: 'text-emerald-900' },
+  purple: { border: 'border-violet-500',  bgFrom: 'from-violet-50',  bgTo: 'to-violet-100',  text: 'text-violet-600',  heading: 'text-violet-900' },
+};
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -33,9 +33,11 @@ export default function LoginPage() {
     try {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) throw new Error('メールアドレスの形式が正しくありません');
       if (formData.password.length < 6) throw new Error('パスワードは6文字以上を入力してください');
+
       const ok = isLogin
         ? await login(formData.email, formData.password, selectedUserType)
         : await signup(formData.email, formData.password, selectedUserType, formData.name);
+
       if (!ok) throw new Error('認証に失敗しました');
       navigate(selectedUserType === 'admin' ? '/admin' : '/dashboard');
     } catch (err: any) {
@@ -48,22 +50,30 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen relative flex items-center justify-center py-16">
       {/* 背景グラデ */}
-      <div className="absolute inset-0 -z-10"
-           style={{background:'radial-gradient(1200px 600px at 80% -10%, rgba(79,70,229,.15), transparent), radial-gradient(1200px 600px at 0% 120%, rgba(139,92,246,.15), transparent)'}} />
+      <div
+        className="absolute inset-0 -z-10"
+        style={{
+          background:
+            'radial-gradient(1200px 600px at 80% -10%, rgba(79,70,229,.15), transparent), radial-gradient(1200px 600px at 0% 120%, rgba(139,92,246,.15), transparent)',
+        }}
+      />
       <div className="container-xl max-w-5xl">
         <div className="grid md:grid-cols-2 gap-8 items-center">
           {/* 左：コピー */}
           <div className="hidden md:block">
             <div className="inline-flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg"
-                   style={{background:'linear-gradient(135deg,var(--brand-from),var(--brand-to))'}}>
+              <div
+                className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg"
+                style={{ background: 'linear-gradient(135deg,var(--brand-from),var(--brand-to))' }}
+              >
                 <Camera className="w-5 h-5 text-white" />
               </div>
               <div className="text-xl font-extrabold">Miles</div>
             </div>
-            <h1 className="display text-4xl mb-4"
-                style={{background:'linear-gradient(120deg,var(--brand-from),var(--brand-to))',
-                        WebkitBackgroundClip:'text', color:'transparent'}}>
+            <h1
+              className="display text-4xl mb-4"
+              style={{ background: 'linear-gradient(120deg,var(--brand-from),var(--brand-to))', WebkitBackgroundClip: 'text', color: 'transparent' }}
+            >
               Welcome back
             </h1>
             <p className="text-gray-600">アカウント種別を選んでログイン/登録してください。</p>
@@ -106,23 +116,74 @@ export default function LoginPage() {
             <form className="grid gap-4" onSubmit={handleSubmit}>
               {!isLogin && (
                 <div>
-                  <label className="block text-sm font-medium mb-1">氏名</label>
+                  <label className="block text-sm font-medium mb-1" htmlFor="name">氏名</label>
                   <div className="relative">
                     <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input className="input pl-12" required value={formData.name}
-                      onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} placeholder="山田 太郎" />
+                    <input
+                      id="name"
+                      className="input pl-12"
+                      required
+                      value={formData.name}
+                      onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+                      placeholder="山田 太郎"
+                    />
                   </div>
                 </div>
               )}
+
               <div>
-                <label className="block text-sm font-medium mb-1">E-mail</label>
+                <label className="block text-sm font-medium mb-1" htmlFor="email">E-mail</label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input className="input pl-12" type="email" required value={formData.email}
-                    onChange={(e) => setFormData((p) => ({ ...p, email: e.target.value }))} placeholder="you@example.com" />
+                  <input
+                    id="email"
+                    className="input pl-12"
+                    type="email"
+                    required
+                    value={formData.email}
+                    onChange={(e) => setFormData((p) => ({ ...p, email: e.target.value }))}
+                    placeholder="you@example.com"
+                  />
                 </div>
               </div>
+
               <div>
-                <label className="block text-sm font-medium mb-1">Password</label>
+                <label className="block text-sm font-medium mb-1" htmlFor="password">Password</label>
                 <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -transl
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    id="password"
+                    className="input pl-12"
+                    type="password"
+                    required
+                    value={formData.password}
+                    onChange={(e) => setFormData((p) => ({ ...p, password: e.target.value }))}
+                    placeholder="6文字以上"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="btn btn-primary w-full py-3 rounded-2xl disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isLoading ? 'Loading...' : (isLogin ? 'Sign in' : 'Create account')}
+              </button>
+            </form>
+
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={() => setIsLogin((v) => !v)}
+                className="text-indigo-600 hover:text-violet-600 font-medium"
+              >
+                {isLogin ? 'アカウントをお持ちでない方はこちら' : 'すでにアカウントをお持ちの方はこちら'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
