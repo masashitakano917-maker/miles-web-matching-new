@@ -18,7 +18,7 @@ type FormState = {
   city: string;
   address2: string;
   bio: string;
-  labels: string[];       // 選択式に変更
+  labels: string[];       // 選択式に
 };
 
 // 選べるラベル（必要に応じて増減OK）
