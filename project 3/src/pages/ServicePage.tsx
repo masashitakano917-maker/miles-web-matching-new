@@ -1,181 +1,99 @@
 import React from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Camera, Sparkles, Users, ArrowRight, Check } from 'lucide-react';
+import { NavLink, useNavigate, useSearchParams } from 'react-router-dom';
+import Header from '../components/Header';
+
+type Plan = { name: string; price: number; unit?: string; extra?: string };
+type Category = { key: string; title: string; plans: Plan[] };
+
+const PHOTO_CATEGORIES: Category[] = [
+  {
+    key: 'realestate',
+    title: '不動産物件撮影',
+    plans: [
+      { name: '20枚納品', price: 20000, extra: '追加1枚 1,000円' },
+      { name: '30枚納品', price: 29000, extra: '追加1枚 1,000円' },
+      { name: '40枚納品', price: 39000, extra: '追加1枚 1,000円' },
+    ],
+  },
+  {
+    key: 'food',
+    title: 'Food撮影',
+    plans: [
+      { name: '10メニュー', price: 15000, extra: '追加1メニュー 1,000円' },
+      { name: '15メニュー', price: 22000, extra: '追加1メニュー 1,000円' },
+      { name: '20メニュー', price: 28000, extra: '追加1メニュー 1,000円' },
+    ],
+  },
+  {
+    key: 'portrait',
+    title: 'ビジネスポートレート',
+    plans: [
+      { name: '20枚納品', price: 20000, extra: '追加1枚 1,000円' },
+      { name: '30枚納品', price: 29000, extra: '追加1枚 1,000円' },
+      { name: '40枚納品', price: 39000, extra: '追加1枚 1,000円' },
+    ],
+  },
+  {
+    key: 'wedding',
+    title: 'ウエディング撮影',
+    plans: [
+      { name: '20枚納品', price: 20000, extra: '追加1枚 1,000円' },
+      { name: '30枚納品', price: 29000, extra: '追加1枚 1,000円' },
+      { name: '40枚納品', price: 39000, extra: '追加1枚 1,000円' },
+    ],
+  },
+];
+
+const CLEAN_CATEGORIES: Category[] = [
+  { key: 'studio', title: 'Studio', plans: [{ name: 'Studio', price: 8000 }] },
+  { key: '1ldk', title: '1LDK', plans: [{ name: '1LDK', price: 12000 }] },
+  { key: '2ldk', title: '2LDK', plans: [{ name: '2LDK', price: 16000 }] },
+  { key: '3ldk', title: '3LDK', plans: [{ name: '3LDK', price: 20000 }] },
+];
 
 export default function ServicePage() {
-  const { serviceType } = useParams<{ serviceType: string }>();
+  const [sp] = useSearchParams();
+  const tab = sp.get('tab') ?? 'photo';
   const navigate = useNavigate();
 
-  const serviceData = {
-    photography: {
-      title: '写真撮影',
-      icon: Camera,
-      color: 'blue',
-      services: [
-        {
-          id: 'real-estate',
-          name: '不動産物件撮影',
-          description: '物件の魅力を最大限に引き出す撮影',
-          plans: [
-            { id: 'basic', name: '20枚納品', price: 20000, deliverables: '20枚', extra: '追加カット1枚1000円' },
-            { id: 'standard', name: '30枚納品', price: 29000, deliverables: '30枚', extra: '追加カット1枚1000円' },
-            { id: 'premium', name: '40枚納品', price: 39000, deliverables: '40枚', extra: '追加カット1枚1000円' }
-          ]
-        },
-        {
-          id: 'food',
-          name: 'Food撮影',
-          description: '美味しさが伝わる料理写真',
-          plans: [
-            { id: 'basic', name: '10メニュー', price: 15000, deliverables: '10メニュー', extra: '1メニュー追加1000円' },
-            { id: 'standard', name: '15メニュー', price: 22000, deliverables: '15メニュー', extra: '1メニュー追加1000円' },
-            { id: 'premium', name: '20メニュー', price: 28000, deliverables: '20メニュー', extra: '1メニュー追加1000円' }
-          ]
-        },
-        {
-          id: 'business-portrait',
-          name: 'ビジネスポートレート',
-          description: 'プロフェッショナルな印象を与える写真',
-          plans: [
-            { id: 'basic', name: '20枚納品', price: 20000, deliverables: '20枚', extra: '追加カット1枚1000円' },
-            { id: 'standard', name: '30枚納品', price: 29000, deliverables: '30枚', extra: '追加カット1枚1000円' },
-            { id: 'premium', name: '40枚納品', price: 39000, deliverables: '40枚', extra: '追加カット1枚1000円' }
-          ]
-        },
-        {
-          id: 'wedding',
-          name: 'ウエディング撮影',
-          description: '特別な瞬間を美しく記録',
-          plans: [
-            { id: 'basic', name: '20枚納品', price: 20000, deliverables: '20枚', extra: '追加カット1枚1000円' },
-            { id: 'standard', name: '30枚納品', price: 29000, deliverables: '30枚', extra: '追加カット1枚1000円' },
-            { id: 'premium', name: '40枚納品', price: 39000, deliverables: '40枚', extra: '追加カット1枚1000円' }
-          ]
-        }
-      ]
-    },
-    cleaning: {
-      title: 'お掃除サービス',
-      icon: Sparkles,
-      color: 'green',
-      services: [
-        {
-          id: 'studio',
-          name: 'Studio',
-          description: 'スタジオ専門の清掃サービス',
-          plans: [
-            { id: 'basic', name: '基本清掃', price: 15000, deliverables: '全体清掃', extra: '機材清掃オプション可能' },
-            { id: 'deep', name: '徹底清掃', price: 25000, deliverables: '深部清掃', extra: '消毒・抗菌処理込み' }
-          ]
-        },
-        {
-          id: '1ldk',
-          name: '1LDK',
-          description: '一人暮らしに最適な清掃',
-          plans: [
-            { id: 'basic', name: '基本清掃', price: 12000, deliverables: '全室清掃', extra: 'キッチン・バス込み' },
-            { id: 'deep', name: '徹底清掃', price: 18000, deliverables: '深部清掃', extra: 'エアコン清掃込み' }
-          ]
-        },
-        {
-          id: '2ldk',
-          name: '2LDK',
-          description: 'カップル・小家族向け清掃',
-          plans: [
-            { id: 'basic', name: '基本清掃', price: 18000, deliverables: '全室清掃', extra: 'キッチン・バス込み' },
-            { id: 'deep', name: '徹底清掃', price: 26000, deliverables: '深部清掃', extra: 'エアコン清掃込み' }
-          ]
-        },
-        {
-          id: '3ldk',
-          name: '3LDK',
-          description: 'ファミリー向け清掃',
-          plans: [
-            { id: 'basic', name: '基本清掃', price: 24000, deliverables: '全室清掃', extra: 'キッチン・バス込み' },
-            { id: 'deep', name: '徹底清掃', price: 35000, deliverables: '深部清掃', extra: 'エアコン清掃込み' }
-          ]
-        }
-      ]
-    },
-    staffing: {
-      title: '人材派遣',
-      icon: Users,
-      color: 'purple',
-      services: [
-        {
-          id: 'event-staff',
-          name: 'イベントスタッフ',
-          description: 'イベント運営のプロフェッショナル',
-          plans: [
-            { id: 'hourly', name: '時間契約', price: 3000, deliverables: '1時間', extra: '最低4時間から' },
-            { id: 'daily', name: '日契約', price: 20000, deliverables: '1日', extra: '8時間勤務' }
-          ]
-        }
-      ]
-    }
-  };
-
-  const currentService = serviceData[serviceType as keyof typeof serviceData];
-
-  if (!currentService) {
-    navigate('/dashboard');
-    return null;
-  }
+  const section = tab === 'clean' ? CLEAN_CATEGORIES : PHOTO_CATEGORIES;
+  const serviceLabel = tab === 'clean' ? 'お掃除サービス' : '写真撮影';
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-8">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="text-blue-600 hover:text-blue-700 mb-4 font-medium transition-colors duration-200"
-          >
-            ← Back to Dashboard
-          </button>
-          <div className="flex items-center space-x-3 mb-4">
-            <currentService.icon className={`h-8 w-8 text-${currentService.color}-600`} />
-            <h1 className="text-3xl font-bold text-gray-900">{currentService.title}</h1>
-          </div>
-          <p className="text-gray-600">Choose the specific service you need and select a plan.</p>
+    <>
+      <Header />
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold">{serviceLabel}</h1>
+          <nav className="flex gap-2">
+            <NavLink to="/services?tab=photo" className={({isActive}) => `px-3 py-2 rounded-lg ${tab==='photo' ? 'bg-gray-900 text-white' : 'hover:bg-gray-100'}`}>写真撮影</NavLink>
+            <NavLink to="/services?tab=clean" className={({isActive}) => `px-3 py-2 rounded-lg ${tab==='clean' ? 'bg-gray-900 text-white' : 'hover:bg-gray-100'}`}>お掃除</NavLink>
+            <NavLink to="/services?tab=staff" className="px-3 py-2 rounded-lg hover:bg-gray-100">人材派遣</NavLink>
+          </nav>
         </div>
 
-        <div className="grid gap-8">
-          {currentService.services.map((service) => (
-            <div key={service.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
-              <div className="p-6 border-b border-gray-200">
-                <h2 className="text-2xl font-semibold text-gray-900 mb-2">{service.name}</h2>
-                <p className="text-gray-600">{service.description}</p>
-              </div>
-              
-              <div className="p-6">
-                <div className="grid md:grid-cols-3 gap-6">
-                  {service.plans.map((plan) => (
-                    <div
-                      key={plan.id}
-                      className="border-2 border-gray-200 rounded-lg p-6 hover:border-blue-300 hover:shadow-md transition-all duration-200 cursor-pointer group"
-                      onClick={() => navigate(`/order/${serviceType}/${service.id}-${plan.id}`)}
-                    >
-                      <div className="text-center">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-2">{plan.name}</h3>
-                        <div className="text-3xl font-bold text-gray-900 mb-1">
-                          ¥{plan.price.toLocaleString()}
-                        </div>
-                        <p className="text-gray-600 mb-4">{plan.deliverables}</p>
-                        <p className="text-sm text-gray-500 mb-6">{plan.extra}</p>
-                        
-                        <button className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 group-hover:bg-blue-700 flex items-center justify-center space-x-2">
-                          <span>Select Plan</span>
-                          <ArrowRight className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+        <div className="grid md:grid-cols-2 gap-6">
+          {section.map((cat) => (
+            <div key={cat.key} className="card p-6">
+              <h2 className="text-xl font-semibold mb-4">{cat.title}</h2>
+              <div className="grid sm:grid-cols-3 gap-4">
+                {cat.plans.map((p, idx) => (
+                  <button
+                    key={idx}
+                    className="border rounded-xl p-4 text-left hover:shadow-md transition group"
+                    onClick={() => navigate(`/order?service=${encodeURIComponent(serviceLabel)}&category=${encodeURIComponent(cat.title)}&plan=${encodeURIComponent(p.name)}&price=${p.price}`)}
+                  >
+                    <div className="font-semibold">{p.name}</div>
+                    <div className="text-gray-700 mt-1">{p.price.toLocaleString()}円</div>
+                    {p.extra && <div className="text-sm text-gray-500 mt-1">{p.extra}</div>}
+                    <div className="text-sm text-blue-600 mt-2 group-hover:underline">オーダーへ</div>
+                  </button>
+                ))}
               </div>
             </div>
           ))}
         </div>
-      </div>
-    </div>
+      </main>
+    </>
   );
 }
