@@ -1,35 +1,50 @@
 // project/src/pages/admin/ProfessionalsPage.tsx
-import React, { useEffect, useState } from 'react';
+// Admin > プロフェッショナル管理（CSV一括 + 手動登録）
+// 変更点：ラベルを自由入力→選択式（複数選択）に変更、郵便番号のハイフン自動付与を実装
+
+import React, { useEffect, useMemo, useState } from 'react';
 import Header from '../../components/Header';
 import { toast } from 'sonner';
-import { Download, Upload } from 'lucide-react';
+import { Download, Upload, Check, X } from 'lucide-react';
 
+// 手動フォーム状態
 type FormState = {
   name: string;
   email: string;
   phone: string;
   initPassword: string;
-  postal: string;
+  postal: string;         // 表示は "123-4567" に自動整形
   prefecture: string;
   city: string;
   address2: string;
   bio: string;
-  labels: string[]; // ← 選択式
+  labels: string[];       // 選択式に変更
 };
 
 // 選べるラベル（必要に応じて増減OK）
 const LABEL_OPTIONS = [
-  'real_estate',
-  'food',
-  'portrait',
   'wedding',
+  'portrait',
+  'food',
+  'real_estate',
   'event',
   'product',
-  'interview',
-  'video',
+  'fashion',
+  'travel',
+  'sports',
+  'corporate',
+  'family',
 ];
 
+// 郵便番号の表示整形：数字だけを抽出して 3-4 でハイフン付与
+function formatPostal(input: string) {
+  const digits = (input || '').replace(/\D/g, '').slice(0, 7);
+  if (digits.length <= 3) return digits;
+  return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+}
+
 export default function ProfessionalsPage() {
+  // ===== 手動登録フォーム =====
   const [form, setForm] = useState<FormState>({
     name: '',
     email: '',
@@ -42,55 +57,117 @@ export default function ProfessionalsPage() {
     bio: '',
     labels: [],
   });
-  const [csvFile, setCsvFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // 郵便番号：入力のたびに数字だけへ正規化 → 7桁になったら「123-4567」へ整形
-  const handlePostalChange = (raw: string) => {
-    const digits = raw.replace(/[^\d]/g, '').slice(0, 7);
-    const formatted =
-      digits.length >= 4 ? `${digits.slice(0, 3)}-${digits.slice(3)}` : digits;
-    setForm((f) => ({ ...f, postal: formatted }));
+  // ===== CSV インポート（既存のまま） =====
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  // ====== フィールド変更ハンドラ ======
+  const onChange = (key: keyof FormState, value: string) => {
+    if (key === 'postal') {
+      // 入力されたらその場でフォーマット
+      setForm((p) => ({ ...p, postal: formatPostal(value) }));
+      return;
+    }
+    setForm((p) => ({ ...p, [key]: value }));
   };
 
-  // 住所のオートフィル（あなたの既存Zip→住所API呼び出しをここで呼ぶ想定）
-  useEffect(() => {
-    const digits = form.postal.replace(/[^\d]/g, '');
-    if (digits.length !== 7) return;
-    // 例: 既存のユーティリティ fetchAddressByZip(digits)
-    // ↓ダミー：必要なら実装をあなたの既存関数へ置換
-    (async () => {
-      try {
-        // ここを既存のAPIに差し替え
-        // const { prefecture, city } = await fetchAddressByZip(digits);
-        // setForm((f) => ({ ...f, prefecture, city }));
-      } catch {
-        /* noop */
-      }
-    })();
-  }, [form.postal]);
+  // 郵便番号をフォーカスアウトした際も最終整形（数字だけで7桁→3-4の形へ）
+  const onPostalBlur = () => {
+    setForm((p) => ({ ...p, postal: formatPostal(p.postal) }));
+  };
 
+  // ラベルのトグル（選択式）
   const toggleLabel = (label: string) => {
-    setForm((f) => {
-      const exists = f.labels.includes(label);
-      return {
-        ...f,
-        labels: exists ? f.labels.filter((l) => l !== label) : [...f.labels, label],
-      };
+    setForm((p) => {
+      const exists = p.labels.includes(label);
+      return { ...p, labels: exists ? p.labels.filter((l) => l !== label) : [...p.labels, label] };
     });
   };
 
-  const onSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
+  // ====== CSVテンプレートDL（既存列名のまま、labelsはカンマ区切り） ======
+  const downloadTemplate = () => {
+    const header = [
+      'name',
+      'email',
+      'phone',
+      'postal',
+      'prefecture',
+      'city',
+      'address2',
+      'bio',
+      'labels',       // カンマ区切り: 例) wedding,food
+      'initPassword', // 初期パスワード
+    ].join(',');
+    const blob = new Blob([header + '\n'], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'professionals_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ====== CSVアップロード（そのまま） ======
+  const onUpload = async () => {
+    if (!csvFile) {
+      toast.error('CSVファイルを選択してください');
+      return;
+    }
+    setUploading(true);
     try {
+      const text = await csvFile.text();
+      // サーバー側で CSV を解析するなら、丸ごと渡す
       const res = await fetch('/api/admin/professionals/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ mode: 'csv', data: text }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      toast.success('プロフェッショナルを登録しました');
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || 'CSV取り込みに失敗しました');
+      }
+      toast.success('CSVの取り込みに成功しました');
+      setCsvFile(null);
+    } catch (e: any) {
+      toast.error(e.message || 'CSV取り込みに失敗しました');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ====== 手動登録：保存 ======
+  const onSave = async () => {
+    // バリデーション（最低限）
+    if (!form.name.trim()) {
+      toast.error('氏名は必須です');
+      return;
+    }
+    if (!form.email.trim()) {
+      toast.error('email は必須です');
+      return;
+    }
+    if (!form.initPassword || form.initPassword.length < 8) {
+      toast.error('初期パスワードは8文字以上にしてください');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // 送信用に整形（postalはそのまま "123-4567" を渡す）
+      const payload = { ...form, labels: form.labels };
+
+      const res = await fetch('/api/admin/professionals/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'single', data: payload }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || '保存に失敗しました');
+
+      toast.success('登録しました');
+      // フォーム初期化
       setForm({
         name: '',
         email: '',
@@ -103,212 +180,202 @@ export default function ProfessionalsPage() {
         bio: '',
         labels: [],
       });
-    } catch (err: any) {
-      toast.error('登録に失敗しました: ' + err.message);
+    } catch (e: any) {
+      toast.error(e.message || '保存に失敗しました');
     } finally {
       setSaving(false);
     }
   };
 
-  const downloadTemplate = () => {
-    const header =
-      'name,email,phone,postal,prefecture,city,address2,bio,labels\n';
-    const blob = new Blob([header], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'professionals_template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const onUploadCsv = async () => {
-    if (!csvFile) {
-      toast.message('CSVファイルを選択してください');
-      return;
-    }
-    const body = new FormData();
-    body.append('file', csvFile);
-    const res = await fetch('/api/admin/professionals/bulk', {
-      method: 'POST',
-      body,
-    });
-    if (!res.ok) {
-      toast.error('CSVインポートに失敗しました');
-      return;
-    }
-    toast.success('CSVインポートを受け付けました');
-    setCsvFile(null);
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-white">
       <Header />
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <h1 className="text-2xl font-bold mb-2">プロフェッショナル管理</h1>
-        <p className="text-gray-500 mb-8">
-          登録/編集・一括CSVインポート、住所（郵便番号→住所）やプロフィール、ラベルなどを管理します。
-        </p>
-
-        {/* CSV */}
-        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-10">
-          <div className="flex items-center gap-3 mb-4">
-            <Upload className="w-5 h-5 text-orange-600" />
-            <h2 className="font-semibold">CSV一括登録</h2>
-          </div>
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-            <input
-              type="file"
-              accept=".csv"
-              onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
-            />
-            <button
-              onClick={onUploadCsv}
-              className="px-4 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700"
-            >
-              アップロード
-            </button>
-            <button
-              onClick={downloadTemplate}
-              className="px-4 py-2 rounded-lg border hover:bg-gray-50 inline-flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              テンプレートをダウンロード
-            </button>
-          </div>
-          <p className="text-sm text-gray-500 mt-3">
-            ヘッダー例：name,email,phone,postal,prefecture,city,address2,bio,labels（labelsはカンマ区切り）
+      <main className="pt-16">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h1 className="text-2xl font-bold text-gray-900">プロフェッショナル管理</h1>
+          <p className="text-gray-500 mt-2">
+            登録/編集・一括CSVインポート、住所（郵便番号→自動整形）、プロフィール、<span className="font-semibold">ラベル（選択式）</span> などを管理します。
           </p>
-        </section>
 
-        {/* 手動登録 */}
-        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h2 className="font-semibold mb-6">手動で1人ずつ登録</h2>
-          <form onSubmit={onSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-sm font-medium mb-1">氏名 *</label>
+          {/* CSV 一括登録 */}
+          <section className="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Upload className="w-5 h-5" />
+              CSV一括登録
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">
+              ヘッダー例：<code className="px-1 py-0.5 bg-gray-50 rounded">name,email,phone,postal,prefecture,city,address2,bio,labels,initPassword</code>
+              （labels は <code>wedding,food</code> のようにカンマ区切り）
+            </p>
+            <div className="mt-4 flex flex-col sm:flex-row gap-3">
               <input
-                className="w-full rounded-lg border px-3 py-2"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                required
+                type="file"
+                accept=".csv"
+                onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
+                className="block w-full sm:w-auto"
               />
+              <button
+                onClick={onUpload}
+                disabled={uploading}
+                className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-lg disabled:opacity-50"
+              >
+                <Upload className="w-4 h-4" />
+                {uploading ? 'アップロード中…' : 'アップロード'}
+              </button>
+              <button
+                onClick={downloadTemplate}
+                className="inline-flex items-center gap-2 border border-gray-300 px-5 py-2 rounded-lg hover:bg-gray-50"
+              >
+                <Download className="w-4 h-4" />
+                テンプレートをダウンロード
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">email *</label>
-              <input
-                className="w-full rounded-lg border px-3 py-2"
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                required
-              />
-            </div>
+          </section>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">初期パスワード *</label>
-              <input
-                className="w-full rounded-lg border px-3 py-2"
-                value={form.initPassword}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, initPassword: e.target.value }))
-                }
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">phone</label>
-              <input
-                className="w-full rounded-lg border px-3 py-2"
-                value={form.phone}
-                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-              />
-            </div>
+          {/* 手動で1人ずつ登録 */}
+          <section className="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <h2 className="text-lg font-semibold text-gray-900">手動で1人ずつ登録</h2>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">郵便番号</label>
-              <input
-                className="w-full rounded-lg border px-3 py-2"
-                placeholder="例: 123-4567"
-                value={form.postal}
-                onChange={(e) => handlePostalChange(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">都道府県</label>
-              <input
-                className="w-full rounded-lg border px-3 py-2 bg-gray-50"
-                value={form.prefecture}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, prefecture: e.target.value }))
-                }
-              />
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">氏名 *</label>
+                <input
+                  value={form.name}
+                  onChange={(e) => onChange('name', e.target.value)}
+                  className="mt-1 w-full rounded-lg border-gray-300"
+                  placeholder="山田 太郎"
+                />
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">市区町村</label>
-              <input
-                className="w-full rounded-lg border px-3 py-2 bg-gray-50"
-                value={form.city}
-                onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">それ以降</label>
-              <input
-                className="w-full rounded-lg border px-3 py-2"
-                value={form.address2}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, address2: e.target.value }))
-                }
-              />
-            </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">email *</label>
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => onChange('email', e.target.value)}
+                  className="mt-1 w-full rounded-lg border-gray-300"
+                  placeholder="pro@example.com"
+                />
+              </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium mb-1">自己紹介</label>
-              <textarea
-                className="w-full rounded-lg border px-3 py-2"
-                rows={4}
-                value={form.bio}
-                onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
-              />
-            </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">初期パスワード *</label>
+                <input
+                  value={form.initPassword}
+                  onChange={(e) => onChange('initPassword', e.target.value)}
+                  className="mt-1 w-full rounded-lg border-gray-300"
+                  placeholder="8文字以上"
+                />
+              </div>
 
-            {/* ラベル：選択式（複数） */}
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium mb-2">ラベル（複数選択可）</label>
-              <div className="flex flex-wrap gap-2">
-                {LABEL_OPTIONS.map((label) => {
-                  const active = form.labels.includes(label);
-                  return (
-                    <button
-                      type="button"
-                      key={label}
-                      onClick={() => toggleLabel(label)}
-                      className={`px-3 py-1.5 rounded-full border text-sm ${
-                        active
-                          ? 'bg-orange-600 text-white border-orange-600'
-                          : 'bg-white hover:bg-gray-50'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">phone</label>
+                <input
+                  value={form.phone}
+                  onChange={(e) => onChange('phone', e.target.value)}
+                  className="mt-1 w-full rounded-lg border-gray-300"
+                  placeholder="090-xxxx-xxxx"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">郵便番号</label>
+                <input
+                  value={form.postal}
+                  onChange={(e) => onChange('postal', e.target.value)}
+                  onBlur={onPostalBlur}
+                  inputMode="numeric"
+                  className="mt-1 w-full rounded-lg border-gray-300"
+                  placeholder="150-0001"
+                />
+                <p className="text-xs text-gray-500 mt-1">7桁の数字を入力すると自動で「123-4567」の形になります。</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">都道府県</label>
+                <input
+                  value={form.prefecture}
+                  onChange={(e) => onChange('prefecture', e.target.value)}
+                  className="mt-1 w-full rounded-lg border-gray-300"
+                  placeholder="東京都"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">市区町村</label>
+                <input
+                  value={form.city}
+                  onChange={(e) => onChange('city', e.target.value)}
+                  className="mt-1 w-full rounded-lg border-gray-300"
+                  placeholder="渋谷区神宮前"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">それ以降</label>
+                <input
+                  value={form.address2}
+                  onChange={(e) => onChange('address2', e.target.value)}
+                  className="mt-1 w-full rounded-lg border-gray-300"
+                  placeholder="1-2-3 ○○マンション 101"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">自己紹介</label>
+                <textarea
+                  value={form.bio}
+                  onChange={(e) => onChange('bio', e.target.value)}
+                  rows={4}
+                  className="mt-1 w-full rounded-lg border-gray-300"
+                  placeholder="経験・強み・対応可能ジャンルなど"
+                />
+              </div>
+
+              {/* ラベル（選択式） */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700">ラベル（複数選択可）</label>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {LABEL_OPTIONS.map((label) => {
+                    const active = form.labels.includes(label);
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => toggleLabel(label)}
+                        className={[
+                          'px-3 py-2 rounded-xl border flex items-center gap-2 transition',
+                          active
+                            ? 'bg-orange-50 border-orange-400 text-orange-700'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50',
+                        ].join(' ')}
+                        aria-pressed={active}
+                      >
+                        {active ? <Check className="w-4 h-4" /> : <X className="w-4 h-4 opacity-0" />}
+                        <span className="capitalize">{label.replace('_', ' ')}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {form.labels.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    選択中: {form.labels.map((l) => l.replace('_', ' ')).join(', ')}
+                  </p>
+                )}
               </div>
             </div>
 
-            <div className="md:col-span-2 flex gap-3">
+            <div className="mt-6 flex justify-end">
               <button
-                type="submit"
+                onClick={onSave}
                 disabled={saving}
-                className="px-5 py-2 rounded-lg bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-60"
+                className="inline-flex items-center justify-center bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-xl font-semibold disabled:opacity-50"
               >
                 {saving ? '保存中…' : '保存'}
               </button>
             </div>
-          </form>
-        </section>
+          </section>
+        </div>
       </main>
     </div>
   );
