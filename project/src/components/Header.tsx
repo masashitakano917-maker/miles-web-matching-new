@@ -1,5 +1,6 @@
+// src/components/Header.tsx
 import React from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Camera } from 'lucide-react';
 
 const nav = [
@@ -10,7 +11,6 @@ const nav = [
 ];
 
 export default function Header() {
-  const navigate = useNavigate();
   return (
     <header className="fixed top-0 inset-x-0 h-16 z-50 border-b border-white/20 bg-white/60 backdrop-blur-xl">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
@@ -22,7 +22,7 @@ export default function Header() {
         </Link>
 
         <nav className="hidden md:flex items-center gap-6">
-          {nav.map((n) => (
+          {nav.map(n => (
             <a key={n.label} href={n.href} className="text-sm font-medium text-gray-700 hover:text-gray-900">
               {n.label}
             </a>
@@ -30,12 +30,12 @@ export default function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <NavLink
+          <Link
             to="/login"
             className="inline-flex items-center px-4 py-2 rounded-xl text-sm font-semibold bg-orange-500 text-white hover:bg-orange-600 transition"
           >
             Log in / Sign up
-          </NavLink>
+          </Link>
         </div>
       </div>
     </header>
