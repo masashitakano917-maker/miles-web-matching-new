@@ -1,3 +1,4 @@
+// project/src/App.tsx
 import React from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 
@@ -7,11 +8,17 @@ import ServicePage from './pages/ServicePage';
 import OrderPage from './pages/OrderPage';
 import ConfirmationPage from './pages/ConfirmationPage';
 import DashboardPage from './pages/DashboardPage';
-import AdminDashboard from './pages/AdminDashboard';
+
+// Admin
+import AdminDashboard from './pages/admin/AdminDashboard';
 import ProfessionalsPage from './pages/admin/ProfessionalsPage';
+
+// ★ 追加: プロ本人ページ
+import ProfilePage from './pages/professional/ProfilePage';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
+/** ログイン必須ガード */
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const loc = useLocation();
@@ -20,6 +27,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** ロール必須ガード */
 function RequireRole({
   role,
   children,
@@ -36,12 +44,14 @@ export default function App() {
   return (
     <AuthProvider>
       <Routes>
+        {/* Public */}
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/services" element={<ServicePage />} />
         <Route path="/order" element={<OrderPage />} />
         <Route path="/confirm" element={<ConfirmationPage />} />
 
+        {/* 共通ダッシュボード（ログイン必須） */}
         <Route
           path="/dashboard"
           element={
@@ -51,6 +61,7 @@ export default function App() {
           }
         />
 
+        {/* Admin セクション */}
         <Route
           path="/admin"
           element={
@@ -61,7 +72,6 @@ export default function App() {
             </RequireAuth>
           }
         />
-
         <Route
           path="/admin/professionals"
           element={
@@ -73,6 +83,19 @@ export default function App() {
           }
         />
 
+        {/* ★ 追加: プロ本人プロフィールページ */}
+        <Route
+          path="/professional/profile"
+          element={
+            <RequireAuth>
+              <RequireRole role="professional">
+                <ProfilePage />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
