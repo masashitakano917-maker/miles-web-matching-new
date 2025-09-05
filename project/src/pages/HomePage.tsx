@@ -1,83 +1,109 @@
 import React from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import Header from '../components/Header';
 
-const Hero: React.FC = () => {
-  return (
-    <section id="hero" className="relative min-h-[70vh] flex items-center justify-center overflow-hidden">
-      <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{
-          backgroundImage:
-            'url(https://images.pexels.com/photos/3278215/pexels-photo-3278215.jpeg?auto=compress&cs=tinysrgb&w=1920&h=1080&fit=crop)',
-        }}
-      >
-        <div className="absolute inset-0 bg-black/40" />
+const Hero: React.FC = () => (
+  <section className="relative overflow-hidden">
+    {/* 背景：写真＋グラデ */}
+    <div
+      className="absolute inset-0 -z-10 bg-cover bg-center"
+      style={{
+        backgroundImage:
+          "url('https://images.unsplash.com/photo-1518779578993-ec3579fee39f?q=80&w=2400&auto=format&fit=crop')",
+      }}
+    />
+    <div className="absolute inset-0 -z-10 bg-gradient-to-b from-white/70 via-white/70 to-white" />
+
+    <div className="container-xl pt-14 pb-20 text-center">
+      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-black/5 mb-6">
+        <Sparkles className="w-4 h-4" /> New • Matching platform for people
       </div>
 
-      <div className="relative z-10 text-center text-white px-4 max-w-4xl mx-auto">
-        <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight animate-fade">
-          Discover the world together
-          <span className="block text-orange-400">with locals</span>
-        </h1>
+      <h1 className="display text-4xl sm:text-6xl md:text-7xl mb-6 animate-fade"
+          style={{background:'linear-gradient(120deg,var(--brand-from),var(--brand-to))',
+                  WebkitBackgroundClip:'text', color:'transparent'}}>
+        Match with the right professional
+      </h1>
 
-        <p className="text-xl md:text-2xl mb-8 opacity-90 leading-relaxed animate-fade-delayed">
-          Unforgettable journeys, authentic experiences curated by Miles
-        </p>
+      <p className="text-lg md:text-xl text-gray-600 max-w-3xl mx-auto mb-10 animate-fade-2">
+        写真撮影・お掃除・人材派遣。郵便番号ベースで近い順に通知、OKした人で即マッチング。
+      </p>
 
-        <a
-          href="#explore"
-          className="btn bg-orange-500 hover:bg-orange-600 text-white font-semibold py-4 px-8 rounded-full text-lg transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-xl inline-flex items-center gap-2 mx-auto animate-fade-delayed"
-          aria-label="Explore Experiences"
-        >
-          Explore Experiences
-          <ArrowRight className="w-5 h-5" />
-        </a>
+      <div className="flex items-center justify-center gap-3 animate-fade-3">
+        <NavLink to="/services?tab=photo" className="btn btn-primary px-6 py-3 rounded-2xl">
+          Get Started <ArrowRight className="w-5 h-5 ml-2" />
+        </NavLink>
+        <a href="#how" className="btn-ghost">How it works</a>
       </div>
+    </div>
+  </section>
+);
 
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-bounce">
-        <div className="w-6 h-10 border-2 border-white rounded-full flex justify-center">
-          <div className="w-1 h-3 bg-white rounded-full mt-2 animate-pulse" />
+const Features: React.FC = () => (
+  <section className="container-xl py-16">
+    <div className="grid md:grid-cols-3 gap-6">
+      {[
+        { title: '半径50kmで候補抽出', desc: '郵便番号→座標化し、近い順に候補を作成。' },
+        { title: '順次通知（7分）', desc: '1人ずつLINE+メール通知。OKで即確定。' },
+        { title: 'リンクはワンタップ', desc: '受諾後は他リンクを即時失効。フェアで高速。' },
+      ].map((f, i) => (
+        <div className="card p-6" key={i}>
+          <CheckCircle2 className="w-6 h-6 text-green-600 mb-3" />
+          <h3 className="font-semibold text-lg mb-1">{f.title}</h3>
+          <p className="text-gray-600">{f.desc}</p>
         </div>
-      </div>
-    </section>
-  );
-};
+      ))}
+    </div>
+  </section>
+);
+
+const CTA: React.FC = () => (
+  <section className="container-xl pb-20">
+    <div className="card p-8 md:p-12 text-center">
+      <h3 className="display text-3xl mb-3">Start your first order today</h3>
+      <p className="text-gray-600 mb-6">プランを選んでオーダー。運営・プロ・クライアントへ自動で通知。</p>
+      <NavLink to="/services?tab=photo" className="btn btn-primary px-6 py-3 rounded-2xl">
+        Choose a service <ArrowRight className="w-5 h-5 ml-2" />
+      </NavLink>
+    </div>
+  </section>
+);
 
 const HomePage: React.FC = () => {
   return (
     <>
       <Header />
-      <main className="scroll-smooth">
+      <main>
         <Hero />
 
-        <section id="explore" className="max-w-6xl mx-auto px-4 py-16 scroll-mt-16">
-          <h2 className="text-3xl font-bold mb-6">Get Started</h2>
-          <p className="text-gray-600 mb-8">写真撮影 / お掃除 / 人材派遣 を選んで、プランを比較しそのまま発注できます。</p>
+        <section id="explore" className="container-xl py-10">
+          <h2 className="display text-3xl mb-6">Explore services</h2>
           <div className="grid md:grid-cols-3 gap-6">
-            <NavLink to="/services?tab=photo" className="card p-6 hover:shadow-xl transition-shadow">
-              <h3 className="text-xl font-semibold mb-2">写真撮影</h3>
-              <p className="text-gray-600">不動産 / Food / ポートレート / ウェディング</p>
-            </NavLink>
-            <NavLink to="/services?tab=clean" className="card p-6 hover:shadow-xl transition-shadow">
-              <h3 className="text-xl font-semibold mb-2">お掃除サービス</h3>
-              <p className="text-gray-600">Studio / 1LDK / 2LDK / 3LDK</p>
-            </NavLink>
-            <NavLink to="/services?tab=staff" className="card p-6 hover:shadow-xl transition-shadow">
-              <h3 className="text-xl font-semibold mb-2">人材派遣</h3>
-              <p className="text-gray-600">準備中</p>
-            </NavLink>
+            {[
+              { to:'/services?tab=photo', title:'写真撮影', desc:'不動産 / Food / ポートレート / ウェディング' },
+              { to:'/services?tab=clean', title:'お掃除サービス', desc:'Studio / 1LDK / 2LDK / 3LDK' },
+              { to:'/services?tab=staff', title:'人材派遣', desc:'準備中' },
+            ].map(card => (
+              <NavLink key={card.title} to={card.to} className="card p-6 hover:shadow-xl transition-shadow">
+                <div className="text-lg font-semibold mb-1">{card.title}</div>
+                <div className="text-gray-600">{card.desc}</div>
+              </NavLink>
+            ))}
           </div>
         </section>
 
-        <section id="about" className="max-w-6xl mx-auto px-4 py-16 scroll-mt-16">
-          <h2 className="text-3xl font-bold mb-4">About Miles</h2>
-          <p className="text-gray-700">人と人をつなぐマッチングプラットフォーム。シンプル・迅速・透明。</p>
+        <div className="container-xl"><div className="hr my-10" /></div>
+
+        <section id="about" className="container-xl py-4">
+          <h2 className="display text-3xl mb-3">About Miles</h2>
+          <p className="text-gray-700 max-w-3xl">
+            人と人をつなぐミニマルなマッチング。依頼は最短数分で確定。透明でスピーディな体験を提供します。
+          </p>
         </section>
 
-        <section id="how" className="max-w-6xl mx-auto px-4 py-16 scroll-mt-16">
-          <h2 className="text-3xl font-bold mb-4">How It Works</h2>
+        <section id="how" className="container-xl py-12">
+          <h2 className="display text-3xl mb-4">How It Works</h2>
           <ol className="list-decimal ml-6 text-gray-700 space-y-2">
             <li>サービスとプランを選ぶ</li>
             <li>オーダーフォームに入力 → 確認</li>
@@ -86,19 +112,23 @@ const HomePage: React.FC = () => {
           </ol>
         </section>
 
-        <section id="faq" className="max-w-6xl mx-auto px-4 py-16 scroll-mt-16">
-          <h2 className="text-3xl font-bold mb-4">FAQ</h2>
+        <Features />
+
+        <section id="faq" className="container-xl py-10">
+          <h2 className="display text-3xl mb-3">FAQ</h2>
           <p className="text-gray-700">よくある質問は準備中です。</p>
         </section>
 
-        <section id="contact" className="max-w-6xl mx-auto px-4 py-16 scroll-mt-16">
-          <h2 className="text-3xl font-bold mb-4">Contact Us</h2>
+        <section id="contact" className="container-xl py-16">
+          <h2 className="display text-3xl mb-3">Contact Us</h2>
           <p className="text-gray-700">support@miles.example</p>
         </section>
+
+        <CTA />
       </main>
 
-      <footer className="border-t">
-        <div className="max-w-6xl mx-auto px-4 py-8 text-gray-600">
+      <footer className="border-t border-white/30">
+        <div className="container-xl py-8 text-sm text-gray-600">
           © {new Date().getFullYear()} Miles. All rights reserved.
         </div>
       </footer>
