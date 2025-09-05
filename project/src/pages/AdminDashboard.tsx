@@ -11,10 +11,7 @@ export default function AdminDashboard() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
           <h1 className="text-2xl font-bold text-gray-900">Admin</h1>
 
-          <Link
-            to="/admin/orders"
-            className="block card p-6 hover:shadow-xl transition border border-white/40"
-          >
+          <Link to="/admin/orders" className="block card p-6 hover:shadow-xl transition border border-white/40">
             <div className="flex items-start gap-4">
               <span className="w-12 h-12 rounded-2xl bg-orange-500/10 text-orange-600 flex items-center justify-center">
                 <ClipboardList className="w-6 h-6" />
@@ -28,10 +25,7 @@ export default function AdminDashboard() {
             </div>
           </Link>
 
-          <Link
-            to="/admin/professionals"
-            className="block card p-6 hover:shadow-xl transition border border-white/40"
-          >
+          <Link to="/admin/professionals" className="block card p-6 hover:shadow-xl transition border border-white/40">
             <div className="flex items-start gap-4">
               <span className="w-12 h-12 rounded-2xl bg-orange-500/10 text-orange-600 flex items-center justify-center">
                 <UsersRound className="w-6 h-6" />
