@@ -1,126 +1,75 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
-export interface User {
+export type UserType = 'customer' | 'professional' | 'admin';
+
+type User = {
   id: string;
   name: string;
   email: string;
-  type: 'customer' | 'professional' | 'admin';
-  phone?: string;
-  postalCode?: string;
-  address?: string;
-  skills?: string[];
-  hourlyRate?: number;
-  availability?: string;
-}
+  role: UserType;
+};
 
-interface AuthContextType {
+type AuthContextType = {
   user: User | null;
-  login: (email: string, password: string, type: string) => Promise<boolean>;
-  signup: (userData: Omit<User, 'id'> & { password: string }) => Promise<boolean>;
-  logout: () => void;
-  updateUser: (userData: Partial<User>) => void;
-}
+  loading: boolean;
+  login: (email: string, password: string, role: UserType) => Promise<boolean>;
+  signup: (email: string, password: string, role: UserType, name: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users database
-const mockUsers: (User & { password: string })[] = [
-  {
-    id: '1',
-    name: 'Admin User',
-    email: 'masashitakano917@gmail.com',
-    password: 'comocomo917',
-    type: 'admin',
-    phone: '090-1234-5678',
-    postalCode: '100-0001',
-    address: '東京都千代田区千代田1-1'
-  },
-  {
-    id: '2',
-    name: 'Customer User',
-    email: 'of@thisismerci.com',
-    password: 'comocomo917',
-    type: 'customer',
-    phone: '090-2345-6789',
-    postalCode: '150-0001',
-    address: '東京都渋谷区神宮前1-1'
-  },
-  {
-    id: '3',
-    name: '田中太郎',
-    email: 'tanaka@example.com',
-    password: 'password123',
-    type: 'professional',
-    phone: '090-3456-7890',
-    postalCode: '160-0001',
-    address: '東京都新宿区西新宿1-1',
-    skills: ['写真撮影', '動画編集'],
-    hourlyRate: 3000,
-    availability: '平日9:00-18:00'
-  }
-];
+const LS_KEY = 'miles_auth_v1';
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const login = async (email: string, password: string, type: string): Promise<boolean> => {
-    const foundUser = mockUsers.find(
-      u => u.email === email && u.password === password && u.type === type
-    );
+  // 初期化（簡易：localStorage）
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) setUser(JSON.parse(raw));
+    } catch {}
+    setLoading(false);
+  }, []);
 
-    if (foundUser) {
-      const { password: _, ...userWithoutPassword } = foundUser;
-      setUser(userWithoutPassword);
-      return true;
-    }
-    return false;
-  };
-
-  const signup = async (userData: Omit<User, 'id'> & { password: string }): Promise<boolean> => {
-    const existingUser = mockUsers.find(u => u.email === userData.email);
-    if (existingUser) {
-      return false;
-    }
-
-    const newUser = {
-      ...userData,
-      id: Date.now().toString()
-    };
-
-    mockUsers.push(newUser);
-    const { password: _, ...userWithoutPassword } = newUser;
-    setUser(userWithoutPassword);
+  const login = async (email: string, password: string, role: UserType) => {
+    // TODO: 実APIに差し替え（Supabase/Authなど）
+    if (!email || !password) return false;
+    const fakeUser: User = { id: cryptoRandom(), name: email.split('@')[0], email, role };
+    setUser(fakeUser);
+    localStorage.setItem(LS_KEY, JSON.stringify(fakeUser));
     return true;
   };
 
-  const logout = () => {
+  const signup = async (email: string, password: string, role: UserType, name: string) => {
+    if (!email || !password || !name) return false;
+    const fakeUser: User = { id: cryptoRandom(), name, email, role };
+    setUser(fakeUser);
+    localStorage.setItem(LS_KEY, JSON.stringify(fakeUser));
+    return true;
+  };
+
+  const logout = async () => {
     setUser(null);
+    localStorage.removeItem(LS_KEY);
   };
 
-  const updateUser = (userData: Partial<User>) => {
-    if (user) {
-      const updatedUser = { ...user, ...userData };
-      setUser(updatedUser);
-      
-      // Update in mock database
-      const userIndex = mockUsers.findIndex(u => u.id === user.id);
-      if (userIndex !== -1) {
-        mockUsers[userIndex] = { ...mockUsers[userIndex], ...userData };
-      }
-    }
-  };
+  const value = useMemo(() => ({ user, loading, login, signup, logout }), [user, loading]);
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
 
-  return (
-    <AuthContext.Provider value={{ user, login, signup, logout, updateUser }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
+};
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+function cryptoRandom() {
+  try {
+    return window.crypto.getRandomValues(new Uint32Array(4)).join('-');
+  } catch {
+    return Math.random().toString(36).slice(2);
   }
-  return context;
 }
