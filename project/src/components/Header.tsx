@@ -1,70 +1,86 @@
-// src/components/Header.tsx
 import React from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { Camera } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-const nav = [
-  { href: '/#about', label: 'About Miles' },
-  { href: '/#how-it-works', label: 'How It Works' },
-  { href: '/#faq', label: 'FAQ' },
-  { href: '/#contact', label: 'Contact Us' },
-];
-
 export default function Header() {
   const { user, logout } = useAuth();
-  const navto = useNavigate();
-  const loc = useLocation();
+  const navigate = useNavigate();
+
+  const goHome = (e: React.MouseEvent) => {
+    e.preventDefault();
+    navigate('/');
+  };
 
   return (
-    <header className="fixed top-0 inset-x-0 h-16 z-50 border-b border-white/20 bg-white/60 backdrop-blur-xl">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
-        {/* ロゴ：Homeへ */}
-        <button
-          onClick={() => navto('/')}
-          className="flex items-center gap-3"
-          aria-label="Go to Home"
-        >
-          <span className="w-10 h-10 rounded-2xl bg-orange-500 flex items-center justify-center shadow">
+    <header className="sticky top-0 z-40 bg-white/70 backdrop-blur border-b">
+      <div className="max-w-7xl mx-auto h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+        {/* 左側ロゴ（クリックでHomeへ） */}
+        <Link to="/" onClick={goHome} className="inline-flex items-center gap-2">
+          <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center">
             <Camera className="w-5 h-5 text-white" />
-          </span>
-          <span className="text-xl font-extrabold text-gray-900">Miles</span>
-        </button>
+          </div>
+          <span className="text-xl font-bold text-gray-900">Miles</span>
+        </Link>
 
-        <nav className="hidden md:flex items-center gap-6">
-          {nav.map(n => (
-            <a key={n.label} href={n.href} className="text-sm font-medium text-gray-700 hover:text-gray-900">
-              {n.label}
-            </a>
-          ))}
+        {/* ナビ */}
+        <nav className="hidden md:flex items-center gap-6 text-sm">
+          <NavLink to="/#about" className="text-gray-700 hover:text-gray-900">
+            About Miles
+          </NavLink>
+          <NavLink to="/#how-it-works" className="text-gray-700 hover:text-gray-900">
+            How It Works
+          </NavLink>
+          <NavLink to="/#faq" className="text-gray-700 hover:text-gray-900">
+            FAQ
+          </NavLink>
+          <NavLink to="/#contact" className="text-gray-700 hover:text-gray-900">
+            Contact Us
+          </NavLink>
         </nav>
 
-        <div className="flex items-center gap-2">
-          {user ? (
+        {/* 右上：ログイン状態で出し分け */}
+        <div className="flex items-center gap-3">
+          {!user ? (
+            <Link
+              to="/login"
+              className="inline-flex items-center px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-black"
+            >
+              Log in / Sign up
+            </Link>
+          ) : (
             <>
-              <span className="hidden sm:inline text-sm text-gray-700">
-                {user.name ?? user.email} {user.role ? `(${user.role})` : ''}
-              </span>
+              {/* ロールに応じたダッシュボードリンク */}
+              {user.role === 'admin' ? (
+                <Link
+                  to="/admin"
+                  className="hidden sm:inline-flex items-center px-4 py-2 rounded-xl border hover:bg-gray-50"
+                >
+                  Admin
+                </Link>
+              ) : (
+                <Link
+                  to="/dashboard"
+                  className="hidden sm:inline-flex items-center px-4 py-2 rounded-xl border hover:bg-gray-50"
+                >
+                  Dashboard
+                </Link>
+              )}
+
               <button
                 onClick={async () => {
-                  await logout();
-                  // ログアウト後、今が保護ルートならホームへ
-                  if (loc.pathname.startsWith('/admin') || loc.pathname.startsWith('/dashboard')) {
-                    navto('/');
+                  try {
+                    await logout();
+                    navigate('/');
+                  } catch {
+                    // noop
                   }
                 }}
-                className="inline-flex items-center px-4 py-2 rounded-xl text-sm font-semibold border bg-white hover:bg-gray-50"
+                className="inline-flex items-center px-4 py-2 rounded-xl bg-orange-600 text-white hover:bg-orange-700"
               >
                 Logout
               </button>
             </>
-          ) : (
-            <Link
-              to="/login"
-              className="inline-flex items-center px-4 py-2 rounded-xl text-sm font-semibold bg-orange-500 text-white hover:bg-orange-600"
-            >
-              Log in / Sign up
-            </Link>
           )}
         </div>
       </div>
