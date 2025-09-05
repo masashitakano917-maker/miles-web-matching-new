@@ -1,5 +1,5 @@
 // project/src/pages/admin/ProfessionalsPage.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Header from '../../components/Header';
 import { toast } from 'sonner';
 import { Download, Upload } from 'lucide-react';
