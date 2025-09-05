@@ -1,28 +1,42 @@
 // project/api/admin/professionals/list.ts
+// GET /api/admin/professionals/list?name=...&label=...&prefecture=...&limit=50&offset=0
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { supabaseAdmin } from '../../_supabaseAdmin';
+import { supabaseAdmin } from '../_supabaseAdmin';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
-
-  const { q = '', label = '', pref = '', page = '1', size = '20' } = req.query as Record<string, string>;
-  const p = Math.max(1, parseInt(page || '1', 10));
-  const s = Math.max(1, Math.min(100, parseInt(size || '20', 10)));
-  const from = (p - 1) * s;
-  const to = from + s - 1;
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
 
   try {
-    let qy = supabaseAdmin.from('professionals').select('*', { count: 'exact' });
+    const { name, label, prefecture, limit = '50', offset = '0' } = req.query as Record<string, string>;
 
-    if (q) qy = qy.ilike('name', `%${q}%`);
-    if (pref) qy = qy.eq('prefecture', pref);
-    if (label) qy = qy.contains('labels', [label]); // text[] に対する部分一致
+    let query = supabaseAdmin
+      .from('professionals')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false });
 
-    const { data, error, count } = await qy.order('created_at', { ascending: false }).range(from, to);
+    if (name && name.trim()) {
+      query = query.ilike('name', `%${name.trim()}%`);
+    }
+
+    if (label && label.trim()) {
+      // 配列カラム labels に label が含まれる
+      query = query.contains('labels', [label.trim()]);
+    }
+
+    if (prefecture && prefecture.trim()) {
+      query = query.eq('prefecture', prefecture.trim());
+    }
+
+    const l = Math.max(1, Math.min(200, Number(limit) || 50));
+    const o = Math.max(0, Number(offset) || 0);
+    query = query.range(o, o + l - 1);
+
+    const { data, error, count } = await query;
     if (error) throw error;
-
-    return res.status(200).json({ ok: true, items: data || [], total: count || 0, page: p, size: s });
+    return res.status(200).json({ data, count });
   } catch (e: any) {
-    return res.status(500).json({ ok: false, error: e?.message || 'internal error' });
+    return res.status(500).json({ error: e.message });
   }
 }
