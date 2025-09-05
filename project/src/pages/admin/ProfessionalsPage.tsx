@@ -151,7 +151,7 @@ export default function ProfessionalsPage() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">プロフェッショナル管理</h1>
               <p className="text-gray-600 mt-2">
-                登録/編集・一括CSVインポート、住所やプロフィール、ラベルなどを管理します。
+                登録/編集・一括CSVインポート、住所（郵便番号→住所）やプロフィール、ラベルなどを管理します。
               </p>
             </div>
             <button
