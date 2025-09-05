@@ -1,20 +1,9 @@
 // src/pages/admin/ProfessionalsPage.tsx
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Header from '../../components/Header';
-import { Upload, UserPlus, FileSpreadsheet, Trash2 } from 'lucide-react';
-
-type Pro = {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  postal: string;
-  prefecture: string;
-  city: string;
-  address2: string;
-  bio: string;
-  labels: string[]; // カンマ区切りを配列に
-};
+import { Upload, UserPlus, FileSpreadsheet, Trash2, RefreshCw } from 'lucide-react';
+import type { Professional } from '../../types/professional';
+import { listProfessionals, createProfessional, upsertProfessionalsBulk, removeProfessional } from '../../api/professionals';
 
 const labelOptions = [
   '不動産撮影',
@@ -22,99 +11,38 @@ const labelOptions = [
   'ポートレート',
   'ウェディング',
   '清掃',
-  '人材派遣'
+  '人材派遣',
 ];
 
 function csvToArray(text: string): string[][] {
-  // シンプルCSV（カンマ区切り、ダブルクオート対応の簡易版）
   const rows: string[][] = [];
-  let cell = '';
-  let row: string[] = [];
-  let inQuote = false;
-
+  let cell = ''; let row: string[] = []; let inQuote = false;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
     if (inQuote) {
       if (c === '"') {
-        if (text[i + 1] === '"') {
-          cell += '"';
-          i++;
-        } else {
-          inQuote = false;
-        }
-      } else {
-        cell += c;
-      }
+        if (text[i + 1] === '"') { cell += '"'; i++; } else { inQuote = false; }
+      } else { cell += c; }
     } else {
-      if (c === '"') {
-        inQuote = true;
-      } else if (c === ',') {
-        row.push(cell.trim());
-        cell = '';
-      } else if (c === '\n' || c === '\r') {
-        if (cell.length || row.length) {
-          row.push(cell.trim());
-          rows.push(row);
-          row = [];
-          cell = '';
-        }
-        // \r\n の場合は次の \n をスキップ
+      if (c === '"') { inQuote = true; }
+      else if (c === ',') { row.push(cell.trim()); cell = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (cell.length || row.length) { row.push(cell.trim()); rows.push(row); row = []; cell = ''; }
         if (c === '\r' && text[i + 1] === '\n') i++;
-      } else {
-        cell += c;
-      }
+      } else { cell += c; }
     }
   }
-  if (cell.length || row.length) {
-    row.push(cell.trim());
-    rows.push(row);
-  }
+  if (cell.length || row.length) { row.push(cell.trim()); rows.push(row); }
   return rows.filter(r => r.some(v => v !== ''));
 }
-
-function normalizeHeader(h: string) {
-  return h.replace(/\s+/g, '').replace(/-/g, '').toLowerCase();
-}
-
-function parseCSV(text: string): Pro[] {
-  const rows = csvToArray(text);
-  if (rows.length === 0) return [];
-
-  const header = rows[0].map(normalizeHeader);
-  const idx = (key: string) => header.indexOf(normalizeHeader(key));
-
-  const get = (r: string[], key: string) => {
-    const i = idx(key);
-    return i >= 0 && r[i] != null ? r[i] : '';
-    }
-
-  const out: Pro[] = [];
-  for (let i = 1; i < rows.length; i++) {
-    const r = rows[i];
-    out.push({
-      id: crypto.randomUUID(),
-      name: get(r, '氏名') || get(r, 'name'),
-      email: get(r, 'email') || get(r, 'mail'),
-      phone: get(r, 'phone') || get(r, '電話番号'),
-      postal: get(r, '郵便番号') || get(r, 'postal'),
-      prefecture: get(r, '都道府県') || get(r, 'prefecture'),
-      city: get(r, '市区町村') || get(r, 'city'),
-      address2: get(r, 'それ以降') || get(r, 'address2') || get(r, '住所2'),
-      bio: get(r, '自己紹介') || get(r, 'bio'),
-      labels: (get(r, 'ラベル') || get(r, 'labels'))
-        .split(',')
-        .map(s => s.trim())
-        .filter(Boolean),
-    });
-  }
-  return out;
-}
+const norm = (s: string) => s.replace(/\s+/g, '').replace(/-/g, '').toLowerCase();
 
 export default function ProfessionalsPage() {
-  const [list, setList] = useState<Pro[]>([]);
+  const [items, setItems] = useState<Professional[]>([]);
+  const [loading, setLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  const [form, setForm] = useState<Omit<Pro, 'id'>>({
+  const [form, setForm] = useState<Omit<Professional, 'id'>>({
     name: '',
     email: '',
     phone: '',
@@ -128,67 +56,112 @@ export default function ProfessionalsPage() {
 
   const csvTemplate = useMemo(() => {
     const cols = [
-      '氏名',
-      'email',
-      'phone',
-      '郵便番号',
-      '都道府県',
-      '市区町村',
-      'それ以降',
-      '自己紹介',
-      'ラベル（カンマ区切り）',
+      '氏名','email','phone','郵便番号','都道府県','市区町村','それ以降','自己紹介','ラベル（カンマ区切り）',
     ];
-    return cols.join(',') + '\n山田太郎,taro@example.com,090-0000-0000,1500001,東京都,渋谷区,神宮前1-2-3,プロフィール文,不動産撮影,ポートレート';
+    return cols.join(',') + '\n山田太郎,taro@example.com,090-0000-0000,1500001,東京都,渋谷区,神宮前1-2-3,プロフィール文,"不動産撮影,ポートレート"';
   }, []);
 
-  const addOne = () => {
-    if (!form.name || !form.email) {
-      alert('氏名とEmailは必須です。');
-      return;
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const data = await listProfessionals();
+      setItems(data);
+    } finally {
+      setLoading(false);
     }
-    setList(prev => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        ...form,
-      },
-    ]);
-    setForm({
-      name: '',
-      email: '',
-      phone: '',
-      postal: '',
-      prefecture: '',
-      city: '',
-      address2: '',
-      bio: '',
-      labels: [],
-    });
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const addOne = async () => {
+    if (!form.name || !form.email) {
+      alert('氏名とEmailは必須です。'); return;
+    }
+    setLoading(true);
+    try {
+      const created = await createProfessional(form);
+      setItems(prev => [created, ...prev]);
+      setForm({ name: '', email: '', phone: '', postal: '', prefecture: '', city: '', address2: '', bio: '', labels: [] });
+    } catch (e: any) {
+      alert(e.message ?? '保存に失敗しました');
+    } finally { setLoading(false); }
+  };
+
+  const parseCSV = (text: string): Omit<Professional,'id'>[] => {
+    const rows = csvToArray(text);
+    if (rows.length === 0) return [];
+    const header = rows[0].map(norm);
+    const idx = (k: string) => header.indexOf(norm(k));
+    const get = (r: string[], k: string) => {
+      const i = idx(k); return i >= 0 && r[i] != null ? r[i] : '';
+    };
+    const out: Omit<Professional,'id'>[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      out.push({
+        name: get(r, '氏名') || get(r, 'name'),
+        email: get(r, 'email'),
+        phone: get(r, 'phone') || get(r, '電話番号'),
+        postal: get(r, '郵便番号') || get(r, 'postal'),
+        prefecture: get(r, '都道府県') || get(r, 'prefecture'),
+        city: get(r, '市区町村') || get(r, 'city'),
+        address2: get(r, 'それ以降') || get(r, 'address2'),
+        bio: get(r, '自己紹介') || get(r, 'bio'),
+        labels: (get(r, 'ラベル') || get(r, 'ラベル（カンマ区切り）') || get(r, 'labels'))
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean),
+      });
+    }
+    return out.filter(r => r.name && r.email);
   };
 
   const onCSV = async (file: File) => {
-    const text = await file.text();
-    const rows = parseCSV(text);
-    if (rows.length === 0) {
-      alert('CSVから読み取れるデータがありません。');
-      return;
-    }
-    setList(prev => [...prev, ...rows]);
+    setLoading(true);
+    try {
+      const text = await file.text();
+      const rows = parseCSV(text);
+      if (!rows.length) { alert('CSVに有効な行がありません'); return; }
+      const count = await upsertProfessionalsBulk(rows);
+      await refresh();
+      alert(`${count} 件登録しました`);
+      if (fileRef.current) fileRef.current.value = '';
+    } catch (e: any) {
+      alert(e.message ?? 'CSV取り込みに失敗しました');
+    } finally { setLoading(false); }
   };
 
-  const remove = (id: string) => setList(prev => prev.filter(x => x.id !== id));
+  const removeRow = async (id: string) => {
+    if (!confirm('削除してよろしいですか？')) return;
+    setLoading(true);
+    try {
+      await removeProfessional(id);
+      setItems(prev => prev.filter(x => x.id !== id));
+    } catch (e: any) {
+      alert(e.message ?? '削除に失敗しました');
+    } finally { setLoading(false); }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-white">
       <Header />
       <main className="pt-16">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">プロフェッショナル管理</h1>
-            <p className="text-gray-600 mt-2">
-              登録/編集・一括CSVインポート、住所（郵便番号→住所）やプロフィール、ラベルなどを管理します。
-              （いまはフロントのみのデモ保存です）
-            </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">プロフェッショナル管理</h1>
+              <p className="text-gray-600 mt-2">
+                登録/編集・一括CSVインポート、住所（郵便番号→住所）やプロフィール、ラベルなどを管理します。
+              </p>
+            </div>
+            <button
+              onClick={refresh}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border bg-white hover:bg-gray-50"
+              disabled={loading}
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              更新
+            </button>
           </div>
 
           {/* CSVインポート */}
@@ -297,16 +270,17 @@ export default function ProfessionalsPage() {
             </div>
 
             <div className="mt-6">
-              <button onClick={addOne} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-orange-500 text-white font-semibold hover:bg-orange-600">
+              <button onClick={addOne} disabled={loading} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-orange-500 text-white font-semibold hover:bg-orange-600 disabled:opacity-60">
                 追加する
               </button>
             </div>
           </section>
 
-          {/* 登録済み一覧（デモ） */}
+          {/* 登録済み一覧 */}
           <section className="bg-white rounded-2xl border shadow-sm p-6">
-            <h2 className="text-lg font-semibold mb-4">登録済み（このページ内だけのデモ保存）</h2>
-            {list.length === 0 ? (
+            <h2 className="text-lg font-semibold mb-4">登録済み</h2>
+            {loading && <p className="text-gray-500">読み込み中...</p>}
+            {!loading && items.length === 0 ? (
               <p className="text-gray-500">まだありません。CSVインポートか手動登録を行ってください。</p>
             ) : (
               <div className="overflow-x-auto">
@@ -323,16 +297,16 @@ export default function ProfessionalsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {list.map(p => (
+                    {items.map(p => (
                       <tr key={p.id} className="border-t">
                         <td className="py-2 pr-4">{p.name}</td>
                         <td className="py-2 pr-4">{p.email}</td>
                         <td className="py-2 pr-4">{p.phone}</td>
                         <td className="py-2 pr-4">{p.postal}</td>
-                        <td className="py-2 pr-4">{`${p.prefecture}${p.city}${p.address2}`}</td>
-                        <td className="py-2 pr-4">{p.labels.join(', ')}</td>
+                        <td className="py-2 pr-4">{`${p.prefecture ?? ''}${p.city ?? ''}${p.address2 ?? ''}`}</td>
+                        <td className="py-2 pr-4">{(p.labels ?? []).join(', ')}</td>
                         <td className="py-2 pr-2">
-                          <button onClick={() => remove(p.id)} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border hover:bg-gray-50">
+                          <button onClick={() => removeRow(p.id)} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border hover:bg-gray-50">
                             <Trash2 className="w-4 h-4" /> 削除
                           </button>
                         </td>
