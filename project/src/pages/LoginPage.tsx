@@ -50,7 +50,17 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-      <div className="absolute inset-0 pointer-events-none bg-[url('data:image/svg+xml,%3Csvg width=\"60\" height=\"60\" viewBox=\"0 0 60 60\" xmlns=\"http://www.w3.org/2000/svg\"%3E%3Cg fill=\"none\" fill-rule=\"evenodd\"%3E%3Cg fill=\"%239C92AC\" fill-opacity=\"0.03\"%3E%3Ccircle cx=\"30\" cy=\"30\" r=\"4\"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-40" />
+      {/* ▼ ここを修正：data:URL の任意値クラスを廃止し、styleでパターン背景を描画 */}
+      <div
+        className="absolute inset-0 pointer-events-none opacity-40"
+        aria-hidden="true"
+        style={{
+          // 60px 間隔のドットパターン（見た目は以前とほぼ同じ）
+          backgroundImage: 'radial-gradient(#9C92AC 1px, transparent 1px)',
+          backgroundSize: '60px 60px',
+          backgroundPosition: '0 0',
+        }}
+      />
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <Link to="/" className="inline-flex items-center space-x-2 mb-6">
@@ -67,6 +77,7 @@ export default function LoginPage() {
           </p>
         </div>
 
+        {/* 種別選択 */}
         <div className="card p-8">
           <h3 className="text-xl font-semibold text-gray-900 mb-6">アカウント種別を選択</h3>
           <div className="grid gap-3">
@@ -99,6 +110,7 @@ export default function LoginPage() {
           </div>
         </div>
 
+        {/* フォーム */}
         <div className="card p-8">
           {errMsg && <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">{errMsg}</div>}
           <form className="space-y-6" onSubmit={handleSubmit}>
