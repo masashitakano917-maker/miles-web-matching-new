@@ -8,7 +8,6 @@ import OrderPage from './pages/OrderPage';
 import ConfirmationPage from './pages/ConfirmationPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminDashboard from './pages/AdminDashboard';
-
 import ProfessionalsPage from './pages/admin/ProfessionalsPage';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -37,14 +36,12 @@ export default function App() {
   return (
     <AuthProvider>
       <Routes>
-        {/* Public pages */}
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/services" element={<ServicePage />} />
         <Route path="/order" element={<OrderPage />} />
         <Route path="/confirm" element={<ConfirmationPage />} />
 
-        {/* Authed */}
         <Route
           path="/dashboard"
           element={
@@ -54,7 +51,6 @@ export default function App() {
           }
         />
 
-        {/* Admin */}
         <Route
           path="/admin"
           element={
@@ -77,7 +73,6 @@ export default function App() {
           }
         />
 
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
