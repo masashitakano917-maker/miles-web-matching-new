@@ -1,8 +1,8 @@
 // project/src/pages/admin/ProfessionalsPage.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Header from '../../components/Header';
 import { toast } from 'sonner';
-import { Download, Upload, Check } from 'lucide-react';
+import { Download, Upload, Check, ArrowLeft, List } from 'lucide-react';
 import { LABEL_OPTIONS, LabelTag } from '../../lib/labels';
 import { useNavigate } from 'react-router-dom';
 
@@ -16,8 +16,8 @@ type FormState = {
   city: string;
   address2: string;
   bio: string;
-  camera_gear: string;     // 追加
-  labels: LabelTag[];      // 選択式
+  camera_gear: string;
+  labels: LabelTag[];
 };
 
 const EMPTY: FormState = {
@@ -34,11 +34,43 @@ const EMPTY: FormState = {
   labels: [],
 };
 
+// 7桁数字 → 123-4567 形式に整形
 const formatPostal = (v: string) => {
   const digits = v.replace(/\D/g, '').slice(0, 7);
   if (digits.length >= 4) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
   return digits;
 };
+
+// fetch ヘルパー（no-store + JSON 固定）
+async function postJSON(url: string, body: unknown) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+  let json: any = null;
+  try { json = await res.json(); } catch { /* noop */ }
+  return { res, json };
+}
+
+// zipcloud（郵便番号→住所）
+async function lookupAddressFromZip(zipRaw: string) {
+  const zipcode = zipRaw.replace(/\D/g, '');
+  if (zipcode.length !== 7) return null;
+  const r = await fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${zipcode}`);
+  const j = await r.json();
+  const hit = j?.results?.[0];
+  if (!hit) return null;
+  return {
+    prefecture: hit.address1 as string, // 都道府県
+    city: `${hit.address2 ?? ''}${hit.address3 ?? ''}`.trim(), // 市区+町域
+  };
+}
 
 export default function ProfessionalsPage() {
   const [form, setForm] = useState<FormState>(EMPTY);
@@ -47,31 +79,20 @@ export default function ProfessionalsPage() {
 
   const canSave = useMemo(() => {
     return (
-      form.name.trim() &&
-      form.email.trim() &&
+      form.name.trim().length > 0 &&
+      form.email.trim().length > 0 &&
       form.initPassword.trim().length >= 8
     );
   }, [form]);
 
-  // 郵便番号 onBlur で住所自動取得（zipcloud）
   const fetchAddress = async (postalRaw: string) => {
-    const zipcode = postalRaw.replace(/\D/g, '');
-    if (zipcode.length !== 7) return;
-    try {
-      const res = await fetch(
-        `https://zipcloud.ibsnet.co.jp/api/search?zipcode=${zipcode}`
-      );
-      const json = await res.json();
-      if (json?.results?.[0]) {
-        const r = json.results[0]; // {address1:都道府県,address2:市区,address3:町域}
-        setForm((s) => ({
-          ...s,
-          prefecture: r.address1 ?? s.prefecture,
-          city: `${r.address2 ?? ''}${r.address3 ?? ''}` || s.city,
-        }));
-      }
-    } catch {
-      /* noop */
+    const found = await lookupAddressFromZip(postalRaw);
+    if (found) {
+      setForm((s) => ({
+        ...s,
+        prefecture: found.prefecture || s.prefecture,
+        city: found.city || s.city,
+      }));
     }
   };
 
@@ -85,24 +106,40 @@ export default function ProfessionalsPage() {
     });
   };
 
+  // CSV 一括登録
   const onUploadCSV = async (file: File) => {
     try {
       const text = await file.text();
-      // 簡易 CSV：1行 1人（ヘッダー：name,email,phone,postal,prefecture,city,address2,bio,camera_gear,labels）
       const rows = text
         .split(/\r?\n/)
         .map((l) => l.trim())
         .filter(Boolean);
+
+      if (rows.length <= 1) {
+        toast.error('CSVにデータ行がありません');
+        return;
+      }
+
       const [header, ...lines] = rows;
       const headers = header.split(',').map((h) => h.trim());
       const idx = (k: string) => headers.indexOf(k);
 
+      const requiredCols = ['name', 'email'];
+      for (const rc of requiredCols) {
+        if (idx(rc) === -1) {
+          toast.error(`CSVヘッダーに ${rc} 列がありません`);
+          return;
+        }
+      }
+
       let ok = 0;
+      let ng = 0;
+
       for (const line of lines) {
         const cols = line.split(',');
         const payload = {
           name: cols[idx('name')] ?? '',
-          email: cols[idx('email')] ?? '',
+          email: (cols[idx('email')] ?? '').toLowerCase(),
           phone: cols[idx('phone')] ?? '',
           initPassword: crypto.randomUUID().slice(0, 12),
           postal: formatPostal(cols[idx('postal')] ?? ''),
@@ -116,51 +153,46 @@ export default function ProfessionalsPage() {
             .map((v) => v.trim())
             .filter(Boolean),
         };
-        const res = await fetch('/api/admin/professionals/create', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-store',
-          },
-          body: JSON.stringify(payload),
-          cache: 'no-store',
-        });
-        if (res.ok) ok++;
+
+        const { res, json } = await postJSON('/api/admin/professionals/create', payload);
+        if (res.ok && json?.ok) ok++;
+        else ng++;
       }
-      toast.success(`CSV 登録完了：${ok} 件`);
-      // CSVでも一覧を最新で見せる
+
+      if (ng === 0) {
+        toast.success(`CSV 登録完了：${ok} 件`);
+      } else {
+        toast.error(`一部失敗：成功 ${ok} / 失敗 ${ng}`);
+      }
+
       navigate('/admin/professionals/list', { replace: true });
     } catch (e: any) {
       toast.error(e?.message ?? 'CSV 取込に失敗しました');
     }
   };
 
+  // 単体保存
   const onSave = async () => {
-    if (!canSave) return;
+    if (!canSave || saving) return;
     setSaving(true);
     try {
       const payload = {
         ...form,
-        // 郵便番号は 123-4567 形式に正規化
+        email: form.email.toLowerCase().trim(),
         postal: formatPostal(form.postal),
       };
-      const res = await fetch('/api/admin/professionals/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-store',
-        },
-        body: JSON.stringify(payload),
-        cache: 'no-store',
-      });
 
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok || !j?.ok) {
-        throw new Error(j?.error || '保存に失敗しました');
+      const { res, json } = await postJSON('/api/admin/professionals/create', payload);
+
+      if (!res.ok || !json?.ok) {
+        // 重複時の 409 / それ以外のメッセージを優先表示
+        if (res.status === 409) {
+          throw new Error('このメールは既に登録されています');
+        }
+        throw new Error(json?.error || '保存に失敗しました');
       }
 
-      toast.success('登録しました');
-      // 入力はリセットし、一覧ページで最新を取得して表示
+      toast.success('登録しました（完了メールを送信しました）');
       setForm(EMPTY);
       navigate('/admin/professionals/list', { replace: true });
     } catch (e: any) {
@@ -171,8 +203,7 @@ export default function ProfessionalsPage() {
   };
 
   const template = useMemo(() => {
-    const header =
-      'name,email,phone,postal,prefecture,city,address2,bio,camera_gear,labels';
+    const header = 'name,email,phone,postal,prefecture,city,address2,bio,camera_gear,labels';
     const sample =
       '山田 太郎,pro@example.com,09000000000,1500001,東京都,渋谷区神宮前,1-2-3 ○○マンション 101,プロフィール例,SONY α7SIII | FE 24-70,real_estate|food|portrait';
     return [header, sample].join('\n');
@@ -192,7 +223,28 @@ export default function ProfessionalsPage() {
     <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-white">
       <Header />
       <main className="max-w-5xl mx-auto px-4 lg:px-0 py-10 space-y-10">
-        <h1 className="text-2xl font-bold text-gray-900">プロフェッショナル管理</h1>
+        {/* ヘッダ操作 */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-900">プロフェッショナル管理</h1>
+          <div className="flex gap-2">
+            <button
+              onClick={() => navigate('/admin', { replace: false })}
+              className="btn-secondary"
+              type="button"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              管理ホームへ
+            </button>
+            <button
+              onClick={() => navigate('/admin/professionals/list', { replace: false })}
+              className="btn-secondary"
+              type="button"
+            >
+              <List className="w-4 h-4" />
+              一覧へ
+            </button>
+          </div>
+        </div>
 
         {/* CSV 一括登録 */}
         <section className="rounded-2xl bg-white border border-gray-200 shadow-sm p-6">
@@ -239,15 +291,19 @@ export default function ProfessionalsPage() {
                 value={form.name}
                 onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
                 placeholder="山田 太郎"
+                autoComplete="name"
               />
             </div>
+
             <div>
               <label className="text-sm text-gray-600">email *</label>
               <input
                 className="mt-1 input"
+                type="email"
                 value={form.email}
                 onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
                 placeholder="pro@example.com"
+                autoComplete="email"
               />
             </div>
 
@@ -255,18 +311,23 @@ export default function ProfessionalsPage() {
               <label className="text-sm text-gray-600">電話番号</label>
               <input
                 className="mt-1 input"
+                type="tel"
                 value={form.phone}
                 onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))}
                 placeholder="090-xxxx-xxxx"
+                autoComplete="tel"
               />
             </div>
+
             <div>
               <label className="text-sm text-gray-600">初期パスワード *</label>
               <input
                 className="mt-1 input"
+                type="password"
                 value={form.initPassword}
                 onChange={(e) => setForm((s) => ({ ...s, initPassword: e.target.value }))}
                 placeholder="8文字以上"
+                autoComplete="new-password"
               />
             </div>
 
@@ -280,16 +341,16 @@ export default function ProfessionalsPage() {
                 }
                 onBlur={() => fetchAddress(form.postal)}
                 placeholder="123-4567"
+                inputMode="numeric"
               />
             </div>
+
             <div>
               <label className="text-sm text-gray-600">都道府県</label>
               <input
                 className="mt-1 input bg-gray-50"
                 value={form.prefecture}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, prefecture: e.target.value }))
-                }
+                onChange={(e) => setForm((s) => ({ ...s, prefecture: e.target.value }))}
                 placeholder="東京都"
               />
             </div>
@@ -303,6 +364,7 @@ export default function ProfessionalsPage() {
                 placeholder="渋谷区神宮前"
               />
             </div>
+
             <div>
               <label className="text-sm text-gray-600">それ以降</label>
               <input
@@ -310,6 +372,7 @@ export default function ProfessionalsPage() {
                 value={form.address2}
                 onChange={(e) => setForm((s) => ({ ...s, address2: e.target.value }))}
                 placeholder="1-2-3 ○○マンション 101"
+                autoComplete="address-line2"
               />
             </div>
 
@@ -363,6 +426,7 @@ export default function ProfessionalsPage() {
               onClick={onSave}
               disabled={!canSave || saving}
               className="btn-primary disabled:opacity-60"
+              type="button"
             >
               {saving ? '保存中…' : '登録する'}
             </button>
@@ -373,7 +437,7 @@ export default function ProfessionalsPage() {
   );
 }
 
-/* tailwind の共通クラス補助 */
+/* tailwind の共通クラス補助（必要なら残す）*/
 declare global {
   interface HTMLElementTagNameMap {
     input: HTMLInputElement;
