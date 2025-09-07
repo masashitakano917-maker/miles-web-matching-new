@@ -1,3 +1,4 @@
+// project/api/admin/professionals/list.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabaseAdmin } from '../_supabaseAdmin';
 
@@ -16,16 +17,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select('id,name,email,phone,postal,prefecture,city,labels,updated_at', { count: 'exact' });
 
     if (q) query = query.ilike('name', `%${q}%`);
-    if (label) query = query.contains('labels', [label]); // labels に単一ラベルを含む
+    if (label) query = query.contains('labels', [label]); // 単一ラベル含む
     if (prefecture && prefecture !== 'すべて') query = query.eq('prefecture', prefecture);
 
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
-    const { data, count, error } = await query
-      .order('updated_at', { ascending: false })
-      .range(from, to);
-
+    const { data, count, error } = await query.order('updated_at', { ascending: false }).range(from, to);
     if (error) return res.status(400).json({ ok: false, error: error.message });
 
     return res.status(200).json({ ok: true, items: data ?? [], total: count ?? 0 });
