@@ -4,6 +4,7 @@ import Header from '../../components/Header';
 import { toast } from 'sonner';
 import { Download, Upload, Check } from 'lucide-react';
 import { LABEL_OPTIONS, LabelTag } from '../../lib/labels';
+import { useNavigate } from 'react-router-dom';
 
 type FormState = {
   name: string;
@@ -42,6 +43,7 @@ const formatPostal = (v: string) => {
 export default function ProfessionalsPage() {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [saving, setSaving] = useState(false);
+  const navigate = useNavigate();
 
   const canSave = useMemo(() => {
     return (
@@ -116,12 +118,18 @@ export default function ProfessionalsPage() {
         };
         const res = await fetch('/api/admin/professionals/create', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+          },
           body: JSON.stringify(payload),
+          cache: 'no-store',
         });
         if (res.ok) ok++;
       }
       toast.success(`CSV 登録完了：${ok} 件`);
+      // CSVでも一覧を最新で見せる
+      navigate('/admin/professionals/list', { replace: true });
     } catch (e: any) {
       toast.error(e?.message ?? 'CSV 取込に失敗しました');
     }
@@ -133,19 +141,28 @@ export default function ProfessionalsPage() {
     try {
       const payload = {
         ...form,
+        // 郵便番号は 123-4567 形式に正規化
         postal: formatPostal(form.postal),
       };
       const res = await fetch('/api/admin/professionals/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        },
         body: JSON.stringify(payload),
+        cache: 'no-store',
       });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
+
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j?.ok) {
         throw new Error(j?.error || '保存に失敗しました');
       }
+
       toast.success('登録しました');
+      // 入力はリセットし、一覧ページで最新を取得して表示
       setForm(EMPTY);
+      navigate('/admin/professionals/list', { replace: true });
     } catch (e: any) {
       toast.error(e?.message ?? '保存に失敗しました');
     } finally {
