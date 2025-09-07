@@ -1,14 +1,18 @@
 // project/api/_supabaseAdmin.ts
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const url = process.env.SUPABASE_URL;
-const serviceRole = process.env.SUPABASE_SERVICE_ROLE;
-
-if (!url || !serviceRole) {
-  // ここで throw しておくと、/api/debug/health で検知しやすい
-  throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE');
+/** 必須ENVの取得（無ければ明示的に例外） */
+function need(name: string): string {
+  const v =
+    process.env[name] ||
+    (name === 'SUPABASE_URL' ? process.env.VITE_SUPABASE_URL : undefined);
+  if (!v) throw new Error(`Missing env: ${name}`);
+  return v;
 }
 
-export const supabaseAdmin = createClient(url, serviceRole, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
+/** Service Role での管理用クライアント（毎回遅延生成） */
+export function getSupabaseAdmin(): SupabaseClient {
+  const url = process.env.SUPABASE_URL || need('VITE_SUPABASE_URL');
+  const serviceKey = need('SUPABASE_SERVICE_ROLE');
+  return createClient(url, serviceKey, { auth: { persistSession: false } });
+}
