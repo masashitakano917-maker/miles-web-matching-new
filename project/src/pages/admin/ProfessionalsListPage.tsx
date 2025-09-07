@@ -1,7 +1,7 @@
 // project/src/pages/admin/ProfessionalsListPage.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import Header from '../../components/Header';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 type Pro = {
   id: string;
@@ -13,15 +13,16 @@ type Pro = {
   city?: string | null;
   labels?: string[] | null;
   updated_at?: string | null;
+  // camera_gear?: string | null; // 使うならコメント解除
 };
 
 const LABEL_OPTIONS = [
-  'real_estate', 'food', 'portrait', 'wedding', 'event', 'product', 'interview',
-  'sports', 'architecture', 'fashion', 'travel', 'drone', 'video'
+  'real_estate','food','portrait','wedding','event','product','interview',
+  'sports','architecture','fashion','travel','drone','video'
 ];
 
 const PREFS = [
-  'すべて', '北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県',
+  'すべて','北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県',
   '茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県',
   '新潟県','富山県','石川県','福井県','山梨県','長野県',
   '岐阜県','静岡県','愛知県','三重県',
@@ -32,6 +33,8 @@ const PREFS = [
 ];
 
 export default function ProfessionalsListPage() {
+  const navigate = useNavigate();
+
   const [q, setQ] = useState('');
   const [label, setLabel] = useState<'すべて' | string>('すべて');
   const [pref, setPref] = useState<'すべて' | string>('すべて');
@@ -77,13 +80,29 @@ export default function ProfessionalsListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qs]);
 
+  // 任意: フィルタ変更時に自動で1ページ目に戻したい場合
+  // useEffect(() => { setPage(1); }, [q, label, pref]);
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-white">
       <Header />
       <main className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-10 pb-20">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">プロフェッショナル一覧</h1>
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold text-gray-900">プロフェッショナル一覧</h1>
+          <div className="flex gap-2">
+            <Link to="/admin/professionals" className="inline-flex items-center gap-2 rounded-xl bg-orange-600 text-white px-4 py-2 font-semibold hover:bg-orange-700 transition">
+              新規追加
+            </Link>
+            <button
+              onClick={fetchList}
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 hover:bg-gray-50 transition"
+            >
+              再読み込み
+            </button>
+          </div>
+        </div>
 
         {/* フィルタ */}
         <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm mb-6">
@@ -151,6 +170,7 @@ export default function ProfessionalsListPage() {
                   <th className="px-4 py-3 text-left">電話</th>
                   <th className="px-4 py-3 text-left">住所</th>
                   <th className="px-4 py-3 text-left">ラベル</th>
+                  {/* <th className="px-4 py-3 text-left">機材</th> */}
                   <th className="px-4 py-3 text-left">更新</th>
                   <th className="px-4 py-3"></th>
                 </tr>
@@ -170,9 +190,7 @@ export default function ProfessionalsListPage() {
                       <td className="px-4 py-3">{r.name}</td>
                       <td className="px-4 py-3">{r.email}</td>
                       <td className="px-4 py-3">{r.phone || '-'}</td>
-                      <td className="px-4 py-3">
-                        {[r.prefecture, r.city].filter(Boolean).join(' ')}
-                      </td>
+                      <td className="px-4 py-3">{[r.prefecture, r.city].filter(Boolean).join(' ')}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {(r.labels || []).map((l) => (
@@ -182,14 +200,13 @@ export default function ProfessionalsListPage() {
                           ))}
                         </div>
                       </td>
+                      {/* <td className="px-4 py-3">{r.camera_gear || '-'}</td> */}
                       <td className="px-4 py-3">
                         {r.updated_at ? new Date(r.updated_at).toLocaleDateString() : '-'}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Link
-                          to={`/admin/professionals`}
-                          className="text-orange-600 hover:underline"
-                        >
+                        {/* 編集対象IDをクエリで渡す */}
+                        <Link to={`/admin/professionals?id=${encodeURIComponent(r.id)}`} className="text-orange-600 hover:underline">
                           編集
                         </Link>
                       </td>
