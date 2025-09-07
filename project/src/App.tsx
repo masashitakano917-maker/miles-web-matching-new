@@ -1,3 +1,4 @@
+// project/src/App.tsx
 import React from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import HomePage from './pages/HomePage';
@@ -6,9 +7,9 @@ import ServicePage from './pages/ServicePage';
 import OrderPage from './pages/OrderPage';
 import ConfirmationPage from './pages/ConfirmationPage';
 import DashboardPage from './pages/DashboardPage';
-import AdminDashboard from './pages/AdminDashboard';
+import AdminDashboard from './pages/admin/AdminDashboard';
 import ProfessionalsPage from './pages/admin/ProfessionalsPage';
-import OrdersPage from './pages/admin/OrdersPage';
+import ProfessionalsListPage from './pages/admin/ProfessionalsListPage'; // ★追加
 import ProfilePage from './pages/professional/ProfilePage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -37,6 +38,7 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/" element={<HomePage />} />
+
         <Route path="/login" element={<LoginPage />} />
         <Route path="/services" element={<ServicePage />} />
         <Route path="/order" element={<OrderPage />} />
@@ -73,15 +75,16 @@ export default function App() {
           }
         />
         <Route
-          path="/admin/orders"
+          path="/admin/professionals/list" // ★新規: 一覧ページ
           element={
             <RequireAuth>
               <RequireRole role="admin">
-                <OrdersPage />
+                <ProfessionalsListPage />
               </RequireRole>
             </RequireAuth>
           }
         />
+        {/* ここに /admin/orders のページが別ファイルであれば同様に追加 */}
 
         {/* Professional 本人ページ */}
         <Route
