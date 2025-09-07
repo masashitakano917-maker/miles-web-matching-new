@@ -1,18 +1,13 @@
-import React, { useEffect, useState } from 'react';
+// project/src/pages/professional/ProfilePage.tsx
+import React, { useEffect, useMemo, useState } from 'react';
 import Header from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { LABEL_OPTIONS } from '../../lib/labels';
-import { toast } from 'sonner';
+import { Link } from 'react-router-dom';
 
-const formatPostal = (v: string) => {
-  const digits = v.replace(/\D/g, '').slice(0, 7);
-  if (digits.length >= 4) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
-  return digits;
-};
-
-type Row = {
+type ProRow = {
   id: string;
+  user_id: string | null;
   name: string;
   email: string;
   phone: string | null;
@@ -23,244 +18,267 @@ type Row = {
   bio: string | null;
   camera_gear: string | null;
   labels: string[] | null;
+  updated_at?: string | null;
 };
+
+const PREFS = [
+  '北海道','青森県','岩手県','宮城県','秋田県','山形県','福島県',
+  '茨城県','栃木県','群馬県','埼玉県','千葉県','東京都','神奈川県',
+  '新潟県','富山県','石川県','福井県','山梨県','長野県',
+  '岐阜県','静岡県','愛知県','三重県',
+  '滋賀県','京都府','大阪府','兵庫県','奈良県','和歌山県',
+  '鳥取県','島根県','岡山県','広島県','山口県',
+  '徳島県','香川県','愛媛県','高知県',
+  '福岡県','佐賀県','長崎県','熊本県','大分県','宮崎県','鹿児島県','沖縄県'
+];
+
+function formatPostal(v: string) {
+  const d = (v || '').replace(/\D/g, '').slice(0, 7);
+  if (d.length < 4) return d;
+  return `${d.slice(0, 3)}-${d.slice(3)}`;
+}
 
 export default function ProfilePage() {
   const { user } = useAuth();
-  const [row, setRow] = useState<Row | null>(null);
+  const [row, setRow] = useState<ProRow | null>(null);
   const [saving, setSaving] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-  const [newPassword, setNewPassword] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
 
-  useEffect(() => {
+  const canSave = useMemo(() => !!row && !!row.name && !!row.email, [row]);
+
+  async function load() {
     if (!user) return;
-    (async () => {
-      const { data, error } = await supabase
-        .from('professionals')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-      if (!error && data) setRow(data as Row);
-    })();
-  }, [user]);
+    // user_id で紐づく 1レコードを取得
+    const { data, error } = await supabase
+      .from('professionals')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
 
-  const fetchAddress = async (postalRaw: string) => {
-    const zipcode = postalRaw.replace(/\D/g, '');
-    if (zipcode.length !== 7) return;
+    if (error) {
+      console.error(error);
+      setMsg('読み込みに失敗しました');
+      return;
+    }
+    if (data) {
+      // postal は常に「123-4567」表示
+      data.postal = formatPostal(data.postal || '');
+      setRow(data as ProRow);
+    } else {
+      setMsg('プロフィールが未登録です。管理者にご連絡ください。');
+    }
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [user?.id]);
+
+  // 郵便番号入力 → 7桁揃ったら住所自動補完
+  async function onPostalBlur() {
+    if (!row) return;
+    const digits = (row.postal || '').replace(/\D/g, '');
+    const formatted = formatPostal(row.postal || '');
+    setRow({ ...row, postal: formatted });
+
+    if (digits.length !== 7) return;
     try {
       const res = await fetch(
-        `https://zipcloud.ibsnet.co.jp/api/search?zipcode=${zipcode}`
+        `https://zipcloud.ibsnet.co.jp/api/search?zipcode=${digits}`
       );
       const json = await res.json();
       if (json?.results?.[0]) {
         const r = json.results[0];
-        setRow((s) =>
-          s
-            ? {
-                ...s,
-                prefecture: r.address1 ?? s.prefecture,
-                city: `${r.address2 ?? ''}${r.address3 ?? ''}` || s.city,
-              }
-            : s
+        setRow((prev) =>
+          prev
+            ? { ...prev, prefecture: r.address1 || prev.prefecture, city: `${r.address2 ?? ''}${r.address3 ?? ''}` || prev.city }
+            : prev
         );
       }
-    } catch {}
-  };
+    } catch (e) {
+      console.warn('zip lookup failed', e);
+    }
+  }
 
-  const onSave = async () => {
+  async function onSave() {
     if (!row) return;
     setSaving(true);
+    setMsg(null);
     try {
+      const payload = {
+        name: row.name,
+        phone: row.phone,
+        email: row.email, // 表示と整合のためそのまま
+        postal: row.postal ? formatPostal(row.postal) : null,
+        prefecture: row.prefecture,
+        city: row.city,
+        address2: row.address2,
+        bio: row.bio,
+        camera_gear: row.camera_gear,
+        // labels は本人編集不可（Admin 管理）
+      };
+
       const { error } = await supabase
         .from('professionals')
-        .update({
-          name: row.name,
-          phone: row.phone,
-          postal: row.postal ? formatPostal(row.postal) : null,
-          prefecture: row.prefecture,
-          city: row.city,
-          address2: row.address2,
-          bio: row.bio,
-          camera_gear: row.camera_gear,
-          // labels は本人編集不可（Admin 管理）
-        })
+        .update({ ...payload, updated_at: new Date().toISOString() })
         .eq('id', row.id);
+
       if (error) throw error;
-      toast.success('保存しました');
+      setMsg('保存しました');
     } catch (e: any) {
-      toast.error(e?.message ?? '保存に失敗しました');
+      console.error(e);
+      setMsg('保存に失敗しました');
     } finally {
       setSaving(false);
     }
-  };
-
-  const onUpdateAuth = async () => {
-    try {
-      if (newEmail || newPassword) {
-        const { error } = await supabase.auth.updateUser({
-          email: newEmail || undefined,
-          password: newPassword || undefined,
-        });
-        if (error) throw error;
-        // email を変えた場合は professionals.email も同期
-        if (newEmail && row) {
-          await supabase.from('professionals').update({ email: newEmail }).eq('id', row.id);
-        }
-        toast.success('アカウント情報を更新しました');
-        setNewEmail('');
-        setNewPassword('');
-      }
-    } catch (e: any) {
-      toast.error(e?.message ?? '更新に失敗しました');
-    }
-  };
-
-  if (!row) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <div className="max-w-4xl mx-auto p-8">読み込み中…</div>
-      </div>
-    );
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-white">
       <Header />
-      <main className="max-w-4xl mx-auto px-4 lg:px-0 py-10 space-y-10">
-        <h1 className="text-2xl font-bold">プロフィール</h1>
+      <main className="container mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 pt-10 pb-20">
+        <h1 className="text-2xl font-bold text-gray-900 mb-6">プロフィール</h1>
 
-        <section className="rounded-2xl bg-white border p-6 space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm text-gray-600">氏名</label>
-              <input
-                className="input mt-1"
-                value={row.name}
-                onChange={(e) => setRow({ ...row, name: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600">電話番号</label>
-              <input
-                className="input mt-1"
-                value={row.phone ?? ''}
-                onChange={(e) => setRow({ ...row, phone: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-600">郵便番号</label>
-              <input
-                className="input mt-1"
-                value={row.postal ?? ''}
-                onChange={(e) =>
-                  setRow({ ...row, postal: formatPostal(e.target.value) })
-                }
-                onBlur={() => row.postal && fetchAddress(row.postal)}
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600">都道府県</label>
-              <input
-                className="input mt-1"
-                value={row.prefecture ?? ''}
-                onChange={(e) => setRow({ ...row, prefecture: e.target.value })}
-              />
+        {!row ? (
+          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+            <p className="text-gray-600">{msg ?? '読み込み中...'}</p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm space-y-6">
+            {/* 基本情報 */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">氏名</label>
+                <input
+                  value={row.name || ''}
+                  onChange={(e) => setRow({ ...row, name: e.target.value })}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">email</label>
+                <input
+                  value={row.email || ''}
+                  onChange={(e) => setRow({ ...row, email: e.target.value })}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">phone</label>
+                <input
+                  value={row.phone || ''}
+                  onChange={(e) => setRow({ ...row, phone: e.target.value })}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                  placeholder="090-xxxx-xxxx"
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="text-sm text-gray-600">市区町村</label>
-              <input
-                className="input mt-1"
-                value={row.city ?? ''}
-                onChange={(e) => setRow({ ...row, city: e.target.value })}
-              />
+            {/* 住所 */}
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">郵便番号</label>
+                <input
+                  value={row.postal || ''}
+                  onChange={(e) => setRow({ ...row, postal: e.target.value })}
+                  onBlur={onPostalBlur}
+                  placeholder="123-4567"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">都道府県</label>
+                <select
+                  value={row.prefecture || ''}
+                  onChange={(e) => setRow({ ...row, prefecture: e.target.value })}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                >
+                  <option value=""></option>
+                  {PREFS.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">市区町村</label>
+                <input
+                  value={row.city || ''}
+                  onChange={(e) => setRow({ ...row, city: e.target.value })}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                />
+              </div>
             </div>
             <div>
-              <label className="text-sm text-gray-600">それ以降</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">それ以降</label>
               <input
-                className="input mt-1"
-                value={row.address2 ?? ''}
+                value={row.address2 || ''}
                 onChange={(e) => setRow({ ...row, address2: e.target.value })}
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                placeholder="建物名・部屋番号など"
               />
             </div>
 
-            <div className="md:col-span-2">
-              <label className="text-sm text-gray-600">自己紹介</label>
-              <textarea
-                className="input mt-1 min-h-[100px]"
-                value={row.bio ?? ''}
-                onChange={(e) => setRow({ ...row, bio: e.target.value })}
-              />
+            {/* 自己紹介・機材 */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">自己紹介</label>
+                <textarea
+                  value={row.bio || ''}
+                  onChange={(e) => setRow({ ...row, bio: e.target.value })}
+                  rows={5}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">カメラ機材</label>
+                <textarea
+                  value={row.camera_gear || ''}
+                  onChange={(e) => setRow({ ...row, camera_gear: e.target.value })}
+                  rows={5}
+                  placeholder="ボディ・レンズ・照明など"
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                />
+              </div>
             </div>
 
-            <div className="md:col-span-2">
-              <label className="text-sm text-gray-600">カメラ機材</label>
-              <input
-                className="input mt-1"
-                value={row.camera_gear ?? ''}
-                onChange={(e) => setRow({ ...row, camera_gear: e.target.value })}
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="text-sm text-gray-600">ラベル（参照のみ）</label>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {(row.labels ?? []).map((t) => (
-                  <span
-                    key={t}
-                    className="px-2 py-1 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 text-xs"
-                  >
-                    {t}
-                  </span>
-                ))}
-                {(!row.labels || row.labels.length === 0) && (
-                  <span className="text-gray-400 text-sm">未設定</span>
+            {/* ラベル（閲覧のみ） */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">ラベル（Admin管理）</label>
+              <div className="flex flex-wrap gap-2">
+                {(row.labels || []).length === 0 ? (
+                  <span className="text-gray-500">未設定</span>
+                ) : (
+                  (row.labels || []).map((l) => (
+                    <span
+                      key={l}
+                      className="inline-block rounded-full bg-orange-50 text-orange-700 border border-orange-200 px-3 py-1 text-xs"
+                    >
+                      {l}
+                    </span>
+                  ))
                 )}
               </div>
-              <p className="text-xs text-gray-400 mt-1">
-                ラベルの変更は管理者に依頼してください
-              </p>
+            </div>
+
+            {/* アクション */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onSave}
+                disabled={!canSave || saving}
+                className="inline-flex items-center gap-2 rounded-xl bg-orange-600 text-white px-4 py-2 font-semibold hover:bg-orange-700 disabled:opacity-50"
+              >
+                {saving ? '保存中...' : '保存'}
+              </button>
+              {row?.id && (
+                <Link
+                  to={`/pro/${row.id}`}
+                  className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 hover:bg-gray-50"
+                  target="_blank"
+                >
+                  公開ページを見る
+                </Link>
+              )}
+              {msg && <span className="text-sm text-gray-600">{msg}</span>}
             </div>
           </div>
-
-        </section>
-
-        {/* アカウント（メール・パスワード） */}
-        <section className="rounded-2xl bg-white border p-6 space-y-4">
-          <div className="font-semibold">アカウント</div>
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm text-gray-600">新しいメール</label>
-              <input
-                className="input mt-1"
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                placeholder={row.email}
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600">新しいパスワード</label>
-              <input
-                type="password"
-                className="input mt-1"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="8文字以上"
-              />
-            </div>
-          </div>
-          <button onClick={onUpdateAuth} className="btn-secondary">
-            メール/パスワードを更新
-          </button>
-        </section>
-
-        <div>
-          <button onClick={onSave} disabled={saving} className="btn-primary">
-            {saving ? '保存中…' : 'プロフィールを保存'}
-          </button>
-        </div>
+        )}
       </main>
     </div>
   );
