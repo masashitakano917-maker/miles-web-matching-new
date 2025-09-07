@@ -1,42 +1,35 @@
-// project/api/admin/professionals/list.ts
-// GET /api/admin/professionals/list?name=...&label=...&prefecture=...&limit=50&offset=0
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabaseAdmin } from '../_supabaseAdmin';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
+  if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
 
   try {
-    const { name, label, prefecture, limit = '50', offset = '0' } = req.query as Record<string, string>;
+    const q = (req.query.q as string) || '';
+    const label = (req.query.label as string) || '';
+    const prefecture = (req.query.prefecture as string) || '';
+    const page = Math.max(1, parseInt((req.query.page as string) || '1', 10));
+    const pageSize = Math.max(1, Math.min(100, parseInt((req.query.pageSize as string) || '10', 10)));
 
     let query = supabaseAdmin
       .from('professionals')
-      .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false });
+      .select('id,name,email,phone,postal,prefecture,city,labels,updated_at', { count: 'exact' });
 
-    if (name && name.trim()) {
-      query = query.ilike('name', `%${name.trim()}%`);
-    }
+    if (q) query = query.ilike('name', `%${q}%`);
+    if (label) query = query.contains('labels', [label]); // labels に単一ラベルを含む
+    if (prefecture && prefecture !== 'すべて') query = query.eq('prefecture', prefecture);
 
-    if (label && label.trim()) {
-      // 配列カラム labels に label が含まれる
-      query = query.contains('labels', [label.trim()]);
-    }
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
-    if (prefecture && prefecture.trim()) {
-      query = query.eq('prefecture', prefecture.trim());
-    }
+    const { data, count, error } = await query
+      .order('updated_at', { ascending: false })
+      .range(from, to);
 
-    const l = Math.max(1, Math.min(200, Number(limit) || 50));
-    const o = Math.max(0, Number(offset) || 0);
-    query = query.range(o, o + l - 1);
+    if (error) return res.status(400).json({ ok: false, error: error.message });
 
-    const { data, error, count } = await query;
-    if (error) throw error;
-    return res.status(200).json({ data, count });
+    return res.status(200).json({ ok: true, items: data ?? [], total: count ?? 0 });
   } catch (e: any) {
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ ok: false, error: e?.message || 'internal error' });
   }
 }
