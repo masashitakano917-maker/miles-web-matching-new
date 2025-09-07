@@ -34,14 +34,12 @@ const EMPTY: FormState = {
   labels: [],
 };
 
-// 7桁数字 → 123-4567 形式に整形
 const formatPostal = (v: string) => {
   const digits = v.replace(/\D/g, '').slice(0, 7);
   if (digits.length >= 4) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
   return digits;
 };
 
-// fetch ヘルパー（no-store + JSON 固定）
 async function postJSON(url: string, body: unknown) {
   const res = await fetch(url, {
     method: 'POST',
@@ -54,11 +52,10 @@ async function postJSON(url: string, body: unknown) {
     cache: 'no-store',
   });
   let json: any = null;
-  try { json = await res.json(); } catch { /* noop */ }
+  try { json = await res.json(); } catch {}
   return { res, json };
 }
 
-// zipcloud（郵便番号→住所）
 async function lookupAddressFromZip(zipRaw: string) {
   const zipcode = zipRaw.replace(/\D/g, '');
   if (zipcode.length !== 7) return null;
@@ -67,8 +64,8 @@ async function lookupAddressFromZip(zipRaw: string) {
   const hit = j?.results?.[0];
   if (!hit) return null;
   return {
-    prefecture: hit.address1 as string, // 都道府県
-    city: `${hit.address2 ?? ''}${hit.address3 ?? ''}`.trim(), // 市区+町域
+    prefecture: hit.address1 as string,
+    city: `${hit.address2 ?? ''}${hit.address3 ?? ''}`.trim(),
   };
 }
 
@@ -77,13 +74,10 @@ export default function ProfessionalsPage() {
   const [saving, setSaving] = useState(false);
   const navigate = useNavigate();
 
-  const canSave = useMemo(() => {
-    return (
-      form.name.trim().length > 0 &&
-      form.email.trim().length > 0 &&
-      form.initPassword.trim().length >= 8
-    );
-  }, [form]);
+  const canSave = useMemo(
+    () => form.name.trim() && form.email.trim() && form.initPassword.trim().length >= 8,
+    [form]
+  );
 
   const fetchAddress = async (postalRaw: string) => {
     const found = await lookupAddressFromZip(postalRaw);
@@ -99,42 +93,25 @@ export default function ProfessionalsPage() {
   const toggleLabel = (tag: LabelTag) => {
     setForm((s) => {
       const exists = s.labels.includes(tag);
-      return {
-        ...s,
-        labels: exists ? s.labels.filter((t) => t !== tag) : [...s.labels, tag],
-      };
+      return { ...s, labels: exists ? s.labels.filter((t) => t !== tag) : [...s.labels, tag] };
     });
   };
 
-  // CSV 一括登録
   const onUploadCSV = async (file: File) => {
     try {
       const text = await file.text();
-      const rows = text
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter(Boolean);
-
-      if (rows.length <= 1) {
-        toast.error('CSVにデータ行がありません');
-        return;
-      }
+      const rows = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      if (rows.length <= 1) { toast.error('CSVにデータ行がありません'); return; }
 
       const [header, ...lines] = rows;
       const headers = header.split(',').map((h) => h.trim());
       const idx = (k: string) => headers.indexOf(k);
 
-      const requiredCols = ['name', 'email'];
-      for (const rc of requiredCols) {
-        if (idx(rc) === -1) {
-          toast.error(`CSVヘッダーに ${rc} 列がありません`);
-          return;
-        }
+      if (idx('name') === -1 || idx('email') === -1) {
+        toast.error('CSVヘッダーに name / email が必要です'); return;
       }
 
-      let ok = 0;
-      let ng = 0;
-
+      let ok = 0, ng = 0;
       for (const line of lines) {
         const cols = line.split(',');
         const payload = {
@@ -148,22 +125,13 @@ export default function ProfessionalsPage() {
           address2: cols[idx('address2')] ?? '',
           bio: cols[idx('bio')] ?? '',
           camera_gear: cols[idx('camera_gear')] ?? '',
-          labels: (cols[idx('labels')] ?? '')
-            .split('|')
-            .map((v) => v.trim())
-            .filter(Boolean),
+          labels: (cols[idx('labels')] ?? '').split('|').map((v) => v.trim()).filter(Boolean),
         };
-
         const { res, json } = await postJSON('/api/admin/professionals/create', payload);
-        if (res.ok && json?.ok) ok++;
-        else ng++;
+        if (res.ok && json?.ok) ok++; else ng++;
       }
-
-      if (ng === 0) {
-        toast.success(`CSV 登録完了：${ok} 件`);
-      } else {
-        toast.error(`一部失敗：成功 ${ok} / 失敗 ${ng}`);
-      }
+      if (ng === 0) toast.success(`CSV 登録完了：${ok} 件`);
+      else toast.error(`一部失敗：成功 ${ok} / 失敗 ${ng}`);
 
       navigate('/admin/professionals/list', { replace: true });
     } catch (e: any) {
@@ -171,7 +139,6 @@ export default function ProfessionalsPage() {
     }
   };
 
-  // 単体保存
   const onSave = async () => {
     if (!canSave || saving) return;
     setSaving(true);
@@ -181,18 +148,22 @@ export default function ProfessionalsPage() {
         email: form.email.toLowerCase().trim(),
         postal: formatPostal(form.postal),
       };
-
       const { res, json } = await postJSON('/api/admin/professionals/create', payload);
 
       if (!res.ok || !json?.ok) {
-        // 重複時の 409 / それ以外のメッセージを優先表示
-        if (res.status === 409) {
-          throw new Error('このメールは既に登録されています');
-        }
+        if (res.status === 409) throw new Error('このメールは既に登録されています');
         throw new Error(json?.error || '保存に失敗しました');
       }
 
-      toast.success('登録しました（完了メールを送信しました）');
+      // メール結果をトーストに表示（未設定時はDRYRUNを明示）
+      if (json?.mail?.dryRun) {
+        toast.success('登録完了（メール送信は未設定のためスキップされました）');
+      } else if (json?.mail?.delivered) {
+        toast.success('登録完了（確認メールを送信しました）');
+      } else {
+        toast.success('登録完了（メール送信に失敗しました。環境変数を確認してください）');
+      }
+
       setForm(EMPTY);
       navigate('/admin/professionals/list', { replace: true });
     } catch (e: any) {
@@ -204,8 +175,7 @@ export default function ProfessionalsPage() {
 
   const template = useMemo(() => {
     const header = 'name,email,phone,postal,prefecture,city,address2,bio,camera_gear,labels';
-    const sample =
-      '山田 太郎,pro@example.com,09000000000,1500001,東京都,渋谷区神宮前,1-2-3 ○○マンション 101,プロフィール例,SONY α7SIII | FE 24-70,real_estate|food|portrait';
+    const sample = '山田 太郎,pro@example.com,09000000000,1500001,東京都,渋谷区神宮前,1-2-3 ○○マンション 101,プロフィール例,SONY α7SIII | FE 24-70,real_estate|food|portrait';
     return [header, sample].join('\n');
   }, []);
 
@@ -213,9 +183,7 @@ export default function ProfessionalsPage() {
     const blob = new Blob([template], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = 'professionals_template.csv';
-    a.click();
+    a.href = url; a.download = 'professionals_template.csv'; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -223,25 +191,14 @@ export default function ProfessionalsPage() {
     <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-white">
       <Header />
       <main className="max-w-5xl mx-auto px-4 lg:px-0 py-10 space-y-10">
-        {/* ヘッダ操作 */}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">プロフェッショナル管理</h1>
           <div className="flex gap-2">
-            <button
-              onClick={() => navigate('/admin', { replace: false })}
-              className="btn-secondary"
-              type="button"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              管理ホームへ
+            <button onClick={() => navigate('/admin', { replace: false })} className="btn-secondary" type="button">
+              <ArrowLeft className="w-4 h-4" /> 管理ホームへ
             </button>
-            <button
-              onClick={() => navigate('/admin/professionals/list', { replace: false })}
-              className="btn-secondary"
-              type="button"
-            >
-              <List className="w-4 h-4" />
-              一覧へ
+            <button onClick={() => navigate('/admin/professionals/list', { replace: false })} className="btn-secondary" type="button">
+              <List className="w-4 h-4" /> 一覧へ
             </button>
           </div>
         </div>
@@ -251,169 +208,78 @@ export default function ProfessionalsPage() {
           <div className="flex items-center justify-between gap-4">
             <div className="font-semibold">CSV 一括登録</div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={downloadTemplate}
-                className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
-              >
-                <Download className="w-4 h-4" />
-                テンプレートをダウンロード
+              <button onClick={downloadTemplate} className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-gray-50">
+                <Download className="w-4 h-4" /> テンプレートをダウンロード
               </button>
               <label className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer">
-                <Upload className="w-4 h-4" />
-                CSV を選択
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) onUploadCSV(f);
-                  }}
-                />
+                <Upload className="w-4 h-4" /> CSV を選択
+                <input type="file" accept=".csv,text/csv" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadCSV(f); }} />
               </label>
             </div>
           </div>
           <p className="text-gray-500 text-sm mt-3">
-            ヘッダー：name,email,phone,postal,prefecture,city,address2,bio,camera_gear,labels
-            / labels は <code>|</code> 区切り
+            ヘッダー：name,email,phone,postal,prefecture,city,address2,bio,camera_gear,labels / labels は <code>|</code> 区切り
           </p>
         </section>
 
         {/* 手動登録 */}
         <section className="rounded-2xl bg-white border border-gray-200 shadow-sm p-6 space-y-6">
           <div className="font-semibold">手動で 1 人ずつ登録</div>
-
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm text-gray-600">氏名 *</label>
-              <input
-                className="mt-1 input"
-                value={form.name}
-                onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
-                placeholder="山田 太郎"
-                autoComplete="name"
-              />
+              <input className="mt-1 input" value={form.name} onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))} placeholder="山田 太郎" autoComplete="name" />
             </div>
-
             <div>
               <label className="text-sm text-gray-600">email *</label>
-              <input
-                className="mt-1 input"
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
-                placeholder="pro@example.com"
-                autoComplete="email"
-              />
+              <input className="mt-1 input" type="email" value={form.email} onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))} placeholder="pro@example.com" autoComplete="email" />
             </div>
-
             <div>
               <label className="text-sm text-gray-600">電話番号</label>
-              <input
-                className="mt-1 input"
-                type="tel"
-                value={form.phone}
-                onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))}
-                placeholder="090-xxxx-xxxx"
-                autoComplete="tel"
-              />
+              <input className="mt-1 input" type="tel" value={form.phone} onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))} placeholder="090-xxxx-xxxx" autoComplete="tel" />
             </div>
-
             <div>
               <label className="text-sm text-gray-600">初期パスワード *</label>
-              <input
-                className="mt-1 input"
-                type="password"
-                value={form.initPassword}
-                onChange={(e) => setForm((s) => ({ ...s, initPassword: e.target.value }))}
-                placeholder="8文字以上"
-                autoComplete="new-password"
-              />
+              <input className="mt-1 input" type="password" value={form.initPassword} onChange={(e) => setForm((s) => ({ ...s, initPassword: e.target.value }))} placeholder="8文字以上" autoComplete="new-password" />
             </div>
-
             <div>
               <label className="text-sm text-gray-600">郵便番号</label>
-              <input
-                className="mt-1 input"
-                value={form.postal}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, postal: formatPostal(e.target.value) }))
-                }
-                onBlur={() => fetchAddress(form.postal)}
-                placeholder="123-4567"
-                inputMode="numeric"
-              />
+              <input className="mt-1 input" value={form.postal}
+                onChange={(e) => setForm((s) => ({ ...s, postal: formatPostal(e.target.value) }))} onBlur={() => fetchAddress(form.postal)}
+                placeholder="123-4567" inputMode="numeric" />
             </div>
-
             <div>
               <label className="text-sm text-gray-600">都道府県</label>
-              <input
-                className="mt-1 input bg-gray-50"
-                value={form.prefecture}
-                onChange={(e) => setForm((s) => ({ ...s, prefecture: e.target.value }))}
-                placeholder="東京都"
-              />
+              <input className="mt-1 input bg-gray-50" value={form.prefecture} onChange={(e) => setForm((s) => ({ ...s, prefecture: e.target.value }))} placeholder="東京都" />
             </div>
-
             <div>
               <label className="text-sm text-gray-600">市区町村</label>
-              <input
-                className="mt-1 input bg-gray-50"
-                value={form.city}
-                onChange={(e) => setForm((s) => ({ ...s, city: e.target.value }))}
-                placeholder="渋谷区神宮前"
-              />
+              <input className="mt-1 input bg-gray-50" value={form.city} onChange={(e) => setForm((s) => ({ ...s, city: e.target.value }))} placeholder="渋谷区神宮前" />
             </div>
-
             <div>
               <label className="text-sm text-gray-600">それ以降</label>
-              <input
-                className="mt-1 input"
-                value={form.address2}
-                onChange={(e) => setForm((s) => ({ ...s, address2: e.target.value }))}
-                placeholder="1-2-3 ○○マンション 101"
-                autoComplete="address-line2"
-              />
+              <input className="mt-1 input" value={form.address2} onChange={(e) => setForm((s) => ({ ...s, address2: e.target.value }))} placeholder="1-2-3 ○○マンション 101" autoComplete="address-line2" />
             </div>
-
             <div className="md:col-span-2">
               <label className="text-sm text-gray-600">自己紹介</label>
-              <textarea
-                className="mt-1 input min-h-[100px]"
-                value={form.bio}
-                onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))}
-                placeholder="経験・強み・対応可能ジャンルなど"
-              />
+              <textarea className="mt-1 input min-h-[100px]" value={form.bio} onChange={(e) => setForm((s) => ({ ...s, bio: e.target.value }))} placeholder="経験・強み・対応可能ジャンルなど" />
             </div>
-
             <div className="md:col-span-2">
               <label className="text-sm text-gray-600">カメラ機材（カメラマンのみ）</label>
-              <input
-                className="mt-1 input"
-                value={form.camera_gear}
-                onChange={(e) => setForm((s) => ({ ...s, camera_gear: e.target.value }))}
-                placeholder="例) SONY α7SIII / FE 24-70 / 70-200 …"
-              />
+              <input className="mt-1 input" value={form.camera_gear} onChange={(e) => setForm((s) => ({ ...s, camera_gear: e.target.value }))} placeholder="例) SONY α7SIII / FE 24-70 / 70-200 …" />
             </div>
-
             <div className="md:col-span-2">
               <label className="text-sm text-gray-600">ラベル（複数選択可）</label>
               <div className="mt-2 grid sm:grid-cols-3 md:grid-cols-4 gap-2">
                 {LABEL_OPTIONS.map((tag) => {
                   const active = form.labels.includes(tag);
                   return (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => toggleLabel(tag)}
+                    <button key={tag} type="button" onClick={() => toggleLabel(tag)}
                       className={`px-3 py-2 rounded-xl border text-sm flex items-center gap-2 ${
-                        active
-                          ? 'border-orange-500 bg-orange-50 text-orange-600'
-                          : 'border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      {active && <Check className="w-4 h-4" />}
-                      <span>{tag}</span>
+                        active ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 hover:bg-gray-50'
+                      }`}>
+                      {active && <Check className="w-4 h-4" />} <span>{tag}</span>
                     </button>
                   );
                 })}
@@ -422,12 +288,7 @@ export default function ProfessionalsPage() {
           </div>
 
           <div className="pt-2">
-            <button
-              onClick={onSave}
-              disabled={!canSave || saving}
-              className="btn-primary disabled:opacity-60"
-              type="button"
-            >
+            <button onClick={onSave} disabled={!canSave || saving} className="btn-primary disabled:opacity-60" type="button">
               {saving ? '保存中…' : '登録する'}
             </button>
           </div>
@@ -435,11 +296,4 @@ export default function ProfessionalsPage() {
       </main>
     </div>
   );
-}
-
-/* tailwind の共通クラス補助（必要なら残す）*/
-declare global {
-  interface HTMLElementTagNameMap {
-    input: HTMLInputElement;
-  }
 }
