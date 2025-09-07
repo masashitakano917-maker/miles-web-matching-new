@@ -17,7 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .select('id,name,email,phone,postal,prefecture,city,labels,updated_at', { count: 'exact' });
 
     if (q) query = query.ilike('name', `%${q}%`);
-    if (label) query = query.contains('labels', [label]); // 単一ラベル含む
+    if (label) query = query.contains('labels', [label]);
     if (prefecture && prefecture !== 'すべて') query = query.eq('prefecture', prefecture);
 
     const from = (page - 1) * pageSize;
@@ -28,6 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({ ok: true, items: data ?? [], total: count ?? 0 });
   } catch (e: any) {
+    console.error('[list professionals] error', e);
     return res.status(500).json({ ok: false, error: e?.message || 'internal error' });
   }
 }
