@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSupabaseAdmin } from '../../_supabaseAdmin'; // ← 修正済
+import { getSupabaseAdmin } from '../../_supabaseAdmin';
 import { Resend } from 'resend';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
@@ -17,22 +17,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const supabase = getSupabaseAdmin();
 
-    const { data: auth, error: eAuth } = await supabase.auth.admin.createUser({
+    // 1) 認証ユーザー作成
+    const { data: auth, error: authErr } = await supabase.auth.admin.createUser({
       email: p.email,
       password: p.initPassword,
       email_confirm: true,
       user_metadata: { role: 'professional', name: p.name },
     });
+    if (authErr) return res.status(500).json({ ok: false, error: authErr.message });
 
-    if (eAuth) {
-      console.error('Auth createUser failed:', eAuth.message);
-      return res.status(500).json({ ok: false, error: eAuth.message });
-    }
+    const userId = auth?.user?.id || null;
+    if (!userId) return res.status(500).json({ ok: false, error: 'user id missing' });
 
-    const user_id = auth.user?.id || null;
-
-    const { error: eDb } = await supabase.from('professionals').insert({
-      user_id,
+    // 2) プロフィール行 upsert
+    const row = {
+      id: userId,
       name: p.name,
       email: p.email,
       phone: p.phone || null,
@@ -43,37 +42,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       bio: p.bio || null,
       camera_gear: p.camera_gear || null,
       labels: Array.isArray(p.labels) ? p.labels : [],
-      updated_at: new Date(),
-    });
+      updated_at: new Date().toISOString(),
+    };
 
-    if (eDb) {
-      console.error('DB insert failed:', eDb.message);
-      return res.status(500).json({ ok: false, error: eDb.message });
-    }
+    const { error: upsertErr } = await supabase.from('professionals').upsert(row, { onConflict: 'id' });
+    if (upsertErr) return res.status(500).json({ ok: false, error: upsertErr.message });
 
+    // 3) ウェルカムメール（Resend が使えれば送る／失敗しても処理は続行）
     if (resend) {
       try {
         await resend.emails.send({
           from: FROM,
-          to: p.email,
-          subject: '【Miles】プロフェッショナル登録が完了しました',
-          html: `
-            <p>${p.name} 様</p>
-            <p>Miles にプロフェッショナルとして登録されました。</p>
-            <p>ログイン用メール: <b>${p.email}</b></p>
-            <p>初期パスワード: <b>${p.initPassword}</b></p>
-            <p>初回ログイン後にパスワード変更をお願いします。</p>
-          `,
-          text: `${p.name} 様\n\nMiles への登録が完了しました。\nメール: ${p.email}\n初期PW: ${p.initPassword}\n`,
+          to: [p.email],
+          subject: '【Miles】アカウントが作成されました',
+          text:
+            `こんにちは ${p.name} 様\n\n` +
+            `Miles への登録が完了しました。\n` +
+            `ログイン用メール: ${p.email}\n` +
+            `初期パスワード: ${p.initPassword}\n\n` +
+            `ログイン後、プロフィールを編集できます。\n`,
         });
       } catch (e) {
-        console.error('Resend email failed:', e);
+        console.error('resend error:', e);
       }
     }
 
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, id: userId });
   } catch (e: any) {
-    console.error('Unexpected error in create handler:', e?.message || e);
     return res.status(500).json({ ok: false, error: e?.message || 'internal error' });
   }
 }
