@@ -1,4 +1,3 @@
-// project/src/pages/professional/ProfilePage.tsx
 import React, { useEffect, useState } from 'react';
 import Header from '../../components/Header';
 import { useAuth } from '../../contexts/AuthContext';
@@ -21,31 +20,46 @@ type Pro = {
 };
 
 export default function ProfilePage() {
-  const { user } = useAuth(); // AuthContext で supabase.auth.user を保持している想定
+  const { user } = useAuth();
   const [row, setRow] = useState<Pro | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user?.id) return;
-    (async () => {
+    const run = async () => {
+      if (!user) return;
       setLoading(true);
       setErr(null);
       try {
-        const { data, error } = await supabase
+        // まず user_id で検索
+        let { data, error } = await supabase
           .from('professionals')
           .select('*')
           .eq('user_id', user.id)
           .single();
-        if (error) throw error;
+
+        // 見つからない/エラーなら email でフォールバック
+        if (error || !data) {
+          const { data: list, error: e2 } = await supabase
+            .from('professionals')
+            .select('*')
+            .eq('email', user.email!)
+            .order('updated_at', { ascending: false })
+            .limit(1);
+          if (e2) throw e2;
+          data = (list && list[0]) || null;
+        }
+
+        if (!data) throw new Error('not found');
         setRow(data as Pro);
       } catch (e: any) {
         setErr(e?.message || '読み込みに失敗しました');
       } finally {
         setLoading(false);
       }
-    })();
-  }, [user?.id]);
+    };
+    run();
+  }, [user]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-white">
