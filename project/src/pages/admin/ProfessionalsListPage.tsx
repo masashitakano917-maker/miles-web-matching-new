@@ -1,7 +1,7 @@
 // project/src/pages/admin/ProfessionalsListPage.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import Header from '../../components/Header';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 type Pro = {
   id: string;
@@ -33,8 +33,6 @@ const PREFS = [
 ];
 
 export default function ProfessionalsListPage() {
-  const navigate = useNavigate();
-
   const [q, setQ] = useState('');
   const [label, setLabel] = useState<'すべて' | string>('すべて');
   const [pref, setPref] = useState<'すべて' | string>('すべて');
@@ -55,10 +53,18 @@ export default function ProfessionalsListPage() {
     return p.toString();
   }, [q, label, pref, page]);
 
+  // ◆ ノーキャッシュで取得（ブラウザ/Vercelのキャッシュを使わない）
   async function fetchList() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/professionals/list?${qs}`);
+      const res = await fetch(`/api/admin/professionals/list?${qs}`, {
+        method: 'GET',
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-store',
+          'Pragma': 'no-cache',
+        },
+      });
       const data = await res.json();
       if (data?.ok) {
         setRows(data.items || []);
@@ -80,9 +86,6 @@ export default function ProfessionalsListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qs]);
 
-  // 任意: フィルタ変更時に自動で1ページ目に戻したい場合
-  // useEffect(() => { setPage(1); }, [q, label, pref]);
-
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -92,7 +95,10 @@ export default function ProfessionalsListPage() {
         <div className="mb-6 flex items-center justify-between gap-3">
           <h1 className="text-2xl font-bold text-gray-900">プロフェッショナル一覧</h1>
           <div className="flex gap-2">
-            <Link to="/admin/professionals" className="inline-flex items-center gap-2 rounded-xl bg-orange-600 text-white px-4 py-2 font-semibold hover:bg-orange-700 transition">
+            <Link
+              to="/admin/professionals"
+              className="inline-flex items-center gap-2 rounded-xl bg-orange-600 text-white px-4 py-2 font-semibold hover:bg-orange-700 transition"
+            >
               新規追加
             </Link>
             <button
@@ -206,7 +212,10 @@ export default function ProfessionalsListPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         {/* 編集対象IDをクエリで渡す */}
-                        <Link to={`/admin/professionals?id=${encodeURIComponent(r.id)}`} className="text-orange-600 hover:underline">
+                        <Link
+                          to={`/admin/professionals?id=${encodeURIComponent(r.id)}`}
+                          className="text-orange-600 hover:underline"
+                        >
                           編集
                         </Link>
                       </td>
