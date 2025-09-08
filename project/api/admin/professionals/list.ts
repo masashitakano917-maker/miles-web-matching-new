@@ -1,6 +1,6 @@
 // project/api/admin/professionals/list.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { supabaseAdmin } from '../_supabaseAdmin';
+import { supabaseAdmin } from '../_supabaseAdmin.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
