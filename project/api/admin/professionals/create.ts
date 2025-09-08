@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSupabaseAdmin } from '../../_supabaseAdmin';
+import { getSupabaseAdmin } from '../../_supabaseAdmin'; // ← 修正済
 import { Resend } from 'resend';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
@@ -17,7 +17,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const supabase = getSupabaseAdmin();
 
-    // 1. Authユーザー作成
     const { data: auth, error: eAuth } = await supabase.auth.admin.createUser({
       email: p.email,
       password: p.initPassword,
@@ -32,7 +31,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const user_id = auth.user?.id || null;
 
-    // 2. professionals テーブルに登録
     const { error: eDb } = await supabase.from('professionals').insert({
       user_id,
       name: p.name,
@@ -45,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       bio: p.bio || null,
       camera_gear: p.camera_gear || null,
       labels: Array.isArray(p.labels) ? p.labels : [],
-      updated_at: new Date(), // 明示的に updated_at を追加
+      updated_at: new Date(),
     });
 
     if (eDb) {
@@ -53,7 +51,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ ok: false, error: eDb.message });
     }
 
-    // 3. メール送信（失敗しても無視せずログに出す）
     if (resend) {
       try {
         await resend.emails.send({
