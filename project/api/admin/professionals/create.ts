@@ -1,6 +1,6 @@
 // project/api/admin/professionals/create.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { supabaseAdmin } from '../_supabaseAdmin';
+import { supabaseAdmin } from '../_supabaseAdmin.js';
 import { sendMail } from '../_mailer';
 
 const APP_BASE_URL = process.env.APP_BASE_URL || 'https://miles-web.vercel.app';
