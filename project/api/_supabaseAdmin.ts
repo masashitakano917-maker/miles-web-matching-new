@@ -1,3 +1,4 @@
+// project/api/_supabaseAdmin.ts
 import { createClient } from '@supabase/supabase-js';
 
 export function getSupabaseAdmin() {
@@ -8,7 +9,10 @@ export function getSupabaseAdmin() {
   const key = process.env.SUPABASE_SERVICE_ROLE || '';
 
   if (!url || !key) {
-    throw new Error('SUPABASE_URL / SUPABASE_SERVICE_ROLE が未設定です');
+    throw new Error('Missing Supabase env (SUPABASE_URL or SERVICE_ROLE)');
   }
-  return createClient(url, key, { auth: { persistSession: false } });
+
+  return createClient(url, key, {
+    auth: { persistSession: false },
+  });
 }
