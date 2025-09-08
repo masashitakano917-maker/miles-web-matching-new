@@ -1,4 +1,3 @@
-// project/api/admin/professionals/create.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getSupabaseAdmin } from '../_supabaseAdmin';
 import { Resend } from 'resend';
@@ -11,55 +10,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
 
   try {
-    const payload = req.body || {};
-    const { name, email, initPassword } = payload;
-    if (!name || !email || !initPassword || String(initPassword).length < 8) {
+    const p = req.body || {};
+    if (!p?.name || !p?.email || !p?.initPassword || String(p.initPassword).length < 8) {
       return res.status(400).json({ ok: false, error: 'invalid payload' });
     }
 
     const supabase = getSupabaseAdmin();
 
-    // 1) Authユーザー作成
-    const { data: userCreated, error: authErr } = await supabase.auth.admin.createUser({
-      email,
-      password: initPassword,
+    // 1) Authユーザー作成（プロフェッショナル）
+    const { data: auth, error: eAuth } = await supabase.auth.admin.createUser({
+      email: p.email,
+      password: p.initPassword,
       email_confirm: true,
-      user_metadata: { role: 'professional', name },
+      user_metadata: { role: 'professional', name: p.name },
     });
-    if (authErr) return res.status(500).json({ ok: false, error: authErr.message });
+    if (eAuth) return res.status(500).json({ ok: false, error: eAuth.message });
 
-    const user_id = userCreated.user?.id;
+    const user_id = auth.user?.id || null;
 
-    // 2) professionalsレコード作成（user_idを必ず保存）
-    const { error: dbErr } = await supabase.from('professionals').insert({
+    // 2) professionals へ挿入（labels は配列で保持）
+    const { error: eDb } = await supabase.from('professionals').insert({
       user_id,
-      name,
-      email,
-      phone: payload.phone || null,
-      postal: payload.postal || null,
-      prefecture: payload.prefecture || null,
-      city: payload.city || null,
-      address2: payload.address2 || null,
-      bio: payload.bio || null,
-      camera_gear: payload.camera_gear || null,
-      labels: Array.isArray(payload.labels) ? payload.labels : [],
+      name: p.name,
+      email: p.email,
+      phone: p.phone || null,
+      postal: p.postal || null,
+      prefecture: p.prefecture || null,
+      city: p.city || null,
+      address2: p.address2 || null,
+      bio: p.bio || null,
+      camera_gear: p.camera_gear || null,
+      labels: Array.isArray(p.labels) ? p.labels : [],
     });
-    if (dbErr) return res.status(500).json({ ok: false, error: dbErr.message });
+    if (eDb) return res.status(500).json({ ok: false, error: eDb.message });
 
-    // 3) ウェルカムメール（RESENDが設定されていれば送信）
+    // 3) ウェルカムメール（設定があれば送信、失敗は無視）
     if (resend) {
-      await resend.emails.send({
-        from: FROM,
-        to: email,
-        subject: '【Miles】アカウントが作成されました',
-        html: `
-          <p>${name} 様</p>
-          <p>Miles にプロフェッショナル登録されました。</p>
-          <p>ログイン用メール: <b>${email}</b></p>
-          <p>初期パスワード: <b>${initPassword}</b></p>
-          <p>初回ログイン後のパスワード変更をおすすめします。</p>
-        `,
-      }).catch(() => { /* メール失敗は致命ではないので握りつぶし */ });
+      try {
+        await resend.emails.send({
+          from: FROM,
+          to: p.email,
+          subject: '【Miles】プロフェッショナル登録が完了しました',
+          html: `
+            <p>${p.name} 様</p>
+            <p>Miles にプロフェッショナルとして登録されました。</p>
+            <p>ログイン用メール: <b>${p.email}</b></p>
+            <p>初期パスワード: <b>${p.initPassword}</b></p>
+            <p>初回ログイン後にパスワード変更をお願いします。</p>
+          `,
+          text: `${p.name} 様\n\nMiles への登録が完了しました。\nメール: ${p.email}\n初期PW: ${p.initPassword}\n`,
+        });
+      } catch {/* ignore */}
     }
 
     return res.status(200).json({ ok: true });
