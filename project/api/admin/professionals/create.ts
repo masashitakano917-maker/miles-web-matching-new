@@ -1,103 +1,103 @@
-// project/api/admin/professionals/create.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { supabaseAdmin } from '../_supabaseAdmin.js';
-import { sendMail } from '../_mailer';
+import { getSupabaseAdmin } from '../../_supabaseAdmin.js';
+import { Resend } from 'resend';
 
-const APP_BASE_URL = process.env.APP_BASE_URL || 'https://miles-web.vercel.app';
-
-function normalizePostal(v?: string) {
-  const d = String(v || '').replace(/\D/g, '').slice(0, 7);
-  if (d.length === 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
-  return d;
+function formatPostal(v: string) {
+  const digits = (v || '').replace(/\D/g, '').slice(0, 7);
+  return digits.length >= 4 ? `${digits.slice(0, 3)}-${digits.slice(3)}` : digits;
 }
-const clean = (v: any) => (v === '' || v === undefined ? null : v);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method !== 'POST') {
+    return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
+  }
 
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    const supabase = getSupabaseAdmin();
 
     const {
-      name, email, phone, initPassword,
-      postal, prefecture, city, address2,
-      bio, camera_gear, labels,
-    } = body || {};
+      name = '',
+      email = '',
+      phone = '',
+      initPassword = '',
+      postal = '',
+      prefecture = '',
+      city = '',
+      address2 = '',
+      bio = '',
+      camera_gear = '',
+      labels = [],
+    } = (req.body ?? {}) as Record<string, any>;
 
-    if (!name || !email) return res.status(400).json({ ok: false, error: 'name/email is required' });
-    if (!initPassword || String(initPassword).length < 8) {
+    if (!name.trim()) return res.status(400).json({ ok: false, error: 'name is required' });
+    if (!email.trim()) return res.status(400).json({ ok: false, error: 'email is required' });
+    if ((initPassword || '').length < 8) {
       return res.status(400).json({ ok: false, error: 'initPassword must be >= 8 chars' });
     }
-    const emailLower = String(email).toLowerCase().trim();
 
-    // 既存チェック
-    const { data: exists, error: existsErr } = await supabaseAdmin
-      .from('professionals')
-      .select('id')
-      .eq('email', emailLower)
-      .maybeSingle();
-    if (existsErr) return res.status(400).json({ ok: false, error: existsErr.message });
-    if (exists) return res.status(409).json({ ok: false, error: 'このメールは既に登録されています' });
-
-    // 1) Auth ユーザー作成（メール確認済み）
-    const { data: created, error: createUserErr } = await supabaseAdmin.auth.admin.createUser({
-      email: emailLower,
+    // 1) 認証ユーザー作成（ロール: professional）
+    const { data: created, error: authErr } = await supabase.auth.admin.createUser({
+      email,
       password: initPassword,
       email_confirm: true,
       user_metadata: { role: 'professional' },
     });
-    if (createUserErr || !created?.user?.id) {
-      return res.status(400).json({ ok: false, error: createUserErr?.message || 'auth user create failed' });
-    }
-    const userId = created.user.id;
+    if (authErr) throw authErr;
+    const userId = created?.user?.id;
+    if (!userId) throw new Error('failed to create auth user');
 
-    // 2) DB へ挿入
-    const labelArr: string[] = Array.isArray(labels) ? labels.filter(Boolean) : [];
-    const insertPayload = {
+    // 2) プロフィール行を作成
+    const { error: insErr } = await supabase.from('professionals').insert({
       user_id: userId,
-      name,
-      email: emailLower,
-      phone: clean(phone),
-      postal: normalizePostal(postal),
-      prefecture: clean(prefecture),
-      city: clean(city),
-      address2: clean(address2),
-      bio: clean(bio),
-      camera_gear: clean(camera_gear),
-      labels: labelArr,
-    };
-    const { data: pro, error: proErr } = await supabaseAdmin
-      .from('professionals')
-      .insert([insertPayload])
-      .select('*')
-      .single();
-    if (proErr) {
-      await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => {});
-      return res.status(400).json({ ok: false, error: proErr.message });
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone || null,
+      postal: formatPostal(postal || ''),
+      prefecture: prefecture || null,
+      city: city || null,
+      address2: address2 || null,
+      bio: bio || null,
+      camera_gear: camera_gear || null,
+      labels: Array.isArray(labels) ? labels : [],
+    });
+    if (insErr) throw insErr;
+
+    // 3) メール送信（Resend）
+    const resendKey = process.env.RESEND_API_KEY;
+    const from = process.env.RESEND_FROM; // 例: 'Miles <noreply@yourdomain.com>'
+    const appUrl =
+      process.env.APP_URL ||
+      (req.headers.origin as string) ||
+      'https://miles-web-matching-new.vercel.app';
+
+    if (resendKey && from) {
+      const resend = new Resend(resendKey);
+      const loginUrl = `${appUrl}/login`;
+      await resend.emails.send({
+        from,
+        to: email,
+        subject: '【Miles】アカウントのご案内',
+        html: `
+          <p>${name} 様</p>
+          <p>Miles にプロフェッショナルアカウントが作成されました。</p>
+          <p>ログインURL：<a href="${loginUrl}">${loginUrl}</a></p>
+          <p>メール：${email}<br/>初期パスワード：${initPassword}</p>
+          <p>初回ログイン後にパスワードの変更をおすすめします。</p>
+        `,
+        text: [
+          `${name} 様`,
+          `Miles にプロフェッショナルアカウントが作成されました。`,
+          `ログインURL：${loginUrl}`,
+          `メール：${email}`,
+          `初期パスワード：${initPassword}`,
+          `初回ログイン後にパスワードの変更をおすすめします。`,
+        ].join('\n'),
+      });
     }
 
-    // 3) メール送信（未設定なら dryrun）
-    const loginUrl = `${APP_BASE_URL}/login`;
-    const mail = await sendMail({
-      to: emailLower,
-      subject: '【Miles】プロフェッショナル登録が完了しました',
-      html: `
-        <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial">
-          <p>${name} 様</p>
-          <p>Miles へのご登録ありがとうございます。以下の情報でログインできます。</p>
-          <ul>
-            <li>ログインURL：<a href="${loginUrl}">${loginUrl}</a></li>
-            <li>メール：${emailLower}</li>
-            <li>初期パスワード：<code>${initPassword}</code></li>
-          </ul>
-          <p>ログイン後、パスワードの変更をおすすめします。</p>
-        </div>
-      `,
-    });
-
-    return res.status(200).json({ ok: true, item: pro, mail });
+    return res.status(200).json({ ok: true, userId });
   } catch (e: any) {
-    console.error('[create professional] error', e);
-    return res.status(500).json({ ok: false, error: e?.message || 'internal error' });
+    return res.status(500).json({ ok: false, error: e?.message || String(e) });
   }
 }
