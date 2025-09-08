@@ -1,6 +1,6 @@
 // project/api/admin/professionals/detail.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getSupabaseAdmin } from '../_supabaseAdmin';
+import { getSupabaseAdmin } from '../../_supabaseAdmin';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store');
