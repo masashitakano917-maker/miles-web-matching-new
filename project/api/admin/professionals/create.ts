@@ -17,18 +17,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const supabase = getSupabaseAdmin();
 
-    // 1) Authユーザー作成（プロフェッショナル）
+    // 1. Authユーザー作成
     const { data: auth, error: eAuth } = await supabase.auth.admin.createUser({
       email: p.email,
       password: p.initPassword,
       email_confirm: true,
       user_metadata: { role: 'professional', name: p.name },
     });
-    if (eAuth) return res.status(500).json({ ok: false, error: eAuth.message });
+
+    if (eAuth) {
+      console.error('Auth createUser failed:', eAuth.message);
+      return res.status(500).json({ ok: false, error: eAuth.message });
+    }
 
     const user_id = auth.user?.id || null;
 
-    // 2) professionals へ挿入（labels は配列で保持）
+    // 2. professionals テーブルに登録
     const { error: eDb } = await supabase.from('professionals').insert({
       user_id,
       name: p.name,
@@ -41,10 +45,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       bio: p.bio || null,
       camera_gear: p.camera_gear || null,
       labels: Array.isArray(p.labels) ? p.labels : [],
+      updated_at: new Date(), // 明示的に updated_at を追加
     });
-    if (eDb) return res.status(500).json({ ok: false, error: eDb.message });
 
-    // 3) ウェルカムメール（設定があれば送信、失敗は無視）
+    if (eDb) {
+      console.error('DB insert failed:', eDb.message);
+      return res.status(500).json({ ok: false, error: eDb.message });
+    }
+
+    // 3. メール送信（失敗しても無視せずログに出す）
     if (resend) {
       try {
         await resend.emails.send({
@@ -60,11 +69,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `,
           text: `${p.name} 様\n\nMiles への登録が完了しました。\nメール: ${p.email}\n初期PW: ${p.initPassword}\n`,
         });
-      } catch {/* ignore */}
+      } catch (e) {
+        console.error('Resend email failed:', e);
+      }
     }
 
     return res.status(200).json({ ok: true });
   } catch (e: any) {
+    console.error('Unexpected error in create handler:', e?.message || e);
     return res.status(500).json({ ok: false, error: e?.message || 'internal error' });
   }
 }
