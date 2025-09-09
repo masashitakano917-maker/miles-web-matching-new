@@ -4,9 +4,10 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import ServicePage from './pages/ServicePage';
+import PlanSelectPage from './pages/PlanSelectPage'; // ★追加：プラン一覧ページ
 
 // 旧: import OrderPage from './pages/OrderPage';
-import NewOrderPage from './pages/customer/NewOrderPage'; // ★追加（新しい発注フォーム）
+import NewOrderPage from './pages/customer/NewOrderPage'; // 新しい発注フォーム
 
 import ConfirmationPage from './pages/ConfirmationPage';
 import DashboardPage from './pages/DashboardPage';
@@ -43,10 +44,22 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
 
-        {/* サービス一覧（カード→カテゴリ→プラン→オーダーへ） */}
+        {/* サービス一覧（カード表示） */}
         <Route path="/services" element={<ServicePage />} />
 
-        {/* ★「/order」を新しい発注ページに割り当て（サービスページのリンクをそのまま活かす） */}
+        {/* プラン一覧（オレンジの「オーダーへ」から遷移） */}
+        <Route
+          path="/services/plan"
+          element={
+            <RequireAuth>
+              <RequireRole role="customer">
+                <PlanSelectPage />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+
+        {/* 発注フォーム（/order と /order/new の両方で到達可） */}
         <Route
           path="/order"
           element={
@@ -57,7 +70,6 @@ export default function App() {
             </RequireAuth>
           }
         />
-        {/* エイリアス：/order/new でも同じページを表示（どちらでもOK） */}
         <Route
           path="/order/new"
           element={
@@ -69,8 +81,10 @@ export default function App() {
           }
         />
 
+        {/* 内容確認 */}
         <Route path="/confirm" element={<ConfirmationPage />} />
 
+        {/* ダッシュボード */}
         <Route
           path="/dashboard"
           element={
@@ -124,6 +138,7 @@ export default function App() {
           }
         />
 
+        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
