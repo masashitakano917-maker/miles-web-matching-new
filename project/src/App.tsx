@@ -17,7 +17,7 @@ import ProfessionalsListPage from './pages/admin/ProfessionalsListPage';
 import ProfilePage from './pages/professional/ProfilePage';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Footer from './components/Footer'; // ★追加
+import Footer from './components/Footer'; // 共通フッター
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -42,7 +42,6 @@ function RequireRole({
 export default function App() {
   return (
     <AuthProvider>
-      {/* 画面全体の高さを確保してフッターを下に固定 */}
       <div className="min-h-screen flex flex-col">
         <div className="flex-1">
           <Routes>
@@ -51,7 +50,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/services" element={<ServicePage />} />
 
-            {/* プラン一覧（オレンジの「オーダーへ」から遷移） */}
+            {/* プラン一覧（サービス→オーダーへ から遷移） */}
             <Route
               path="/services/plan"
               element={
@@ -63,7 +62,7 @@ export default function App() {
               }
             />
 
-            {/* 発注フォーム（/order と /order/new の両方で到達可） */}
+            {/* 発注フォーム（/order と /order/new の両方） */}
             <Route
               path="/order"
               element={
@@ -134,7 +133,7 @@ export default function App() {
                 <RequireAuth>
                   <RequireRole role="admin">
                     <ProfessionalsListPage />
-                  </Role>
+                  </RequireRole> {/* ← ここを </RequireRole> に修正 */}
                 </RequireAuth>
               }
             />
