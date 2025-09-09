@@ -9,6 +9,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
 
   const isPro = user?.role === 'professional';
+  const isCustomer = user?.role === 'customer';
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-white">
@@ -54,10 +55,17 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-6">
-            <p className="text-gray-700">
-              ようこそ、{user?.email} さん
-            </p>
+            <p className="text-gray-700">ようこそ、{user?.email} さん</p>
             <p className="text-gray-500 mt-1">ロール: {user?.role ?? '-'}</p>
+
+            {isCustomer && (
+              <div className="mt-6">
+                {/* 顧客だけ：新規発注ボタン */}
+                <Link to="/order/new" className="btn-primary">
+                  新規発注
+                </Link>
+              </div>
+            )}
           </div>
         )}
       </main>
