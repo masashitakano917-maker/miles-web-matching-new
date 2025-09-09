@@ -1,195 +1,145 @@
 // project/src/pages/customer/NewOrderPage.tsx
 import React, { useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import Header from '../../components/Header';
 
-type Form = {
-  // プラン情報
-  service: 'photo' | 'clean' | 'staff';
+type OrderForm = {
+  service: string;
   plan: string;
   price: number;
-
-  // 日時（第一〜第三）
-  date1: string;
-  date2: string;
-  date3: string;
-
+  // 希望日時
+  prefer_datetime_1: string;
+  prefer_datetime_2: string;
+  prefer_datetime_3: string;
   // 住所
   postal: string;
   prefecture: string;
   city: string;
-  line1: string;
-
-  // 発注者
+  address2: string;
+  // 連絡先
   client_name: string;
   client_email: string;
-  phone: string;
-
-  // 任意
-  meetup?: string;
-  note?: string;
-
-  // 通知半径（UIでは非表示・固定 80）
-  radius_km: number;
+  client_phone: string;
+  // 集合場所（任意）
+  meetup: string;
+  // 備考
+  note: string;
 };
 
-const EMPTY: Omit<Form, 'service' | 'plan' | 'price'> = {
-  date1: '',
-  date2: '',
-  date3: '',
-  postal: '',
-  prefecture: '',
-  city: '',
-  line1: '',
-  client_name: '',
-  client_email: '',
-  phone: '',
-  meetup: '',
-  note: '',
-  radius_km: 80, // ← 固定
-};
+const RADIUS_KM = 80; // 通知半径は固定
 
-export default function NewOrderPage(): JSX.Element {
+export default function NewOrderPage() {
   const [sp] = useSearchParams();
   const navigate = useNavigate();
 
-  const service = (sp.get('service') as Form['service']) ?? 'photo';
-  const plan = sp.get('plan') ?? '';
-  const price = Number(sp.get('price') ?? 0);
+  const initial: OrderForm = useMemo(
+    () => ({
+      service: sp.get('service') ?? '',
+      plan: sp.get('plan') ?? '',
+      price: Number(sp.get('price') ?? 0),
+      prefer_datetime_1: '',
+      prefer_datetime_2: '',
+      prefer_datetime_3: '',
+      postal: '',
+      prefecture: '',
+      city: '',
+      address2: '',
+      client_name: '',
+      client_email: '',
+      client_phone: '',
+      meetup: '',
+      note: '',
+    }),
+    [sp]
+  );
 
-  const [form, setForm] = useState<Form>({ service, plan, price, ...EMPTY });
+  const [form, setForm] = useState<OrderForm>(initial);
 
-  const planLabel = useMemo(() => {
-    const map: Record<Form['service'], string> = {
-      photo: '写真撮影',
-      clean: '清掃サービス',
-      staff: '人材派遣',
-    };
-    return `${map[form.service]}｜${form.plan}（${form.price.toLocaleString()}円）`;
-  }, [form.service, form.plan, form.price]);
-
-  const onChange =
-    (key: keyof Form) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      const v = e.target.value;
-      setForm((prev) => ({ ...prev, [key]: v }));
-    };
-
-  const canNext =
-    !!form.client_name &&
-    !!form.client_email &&
-    !!form.date1 &&
-    !!form.postal &&
-    !!form.prefecture &&
-    !!form.city &&
-    !!form.line1;
+  const onChange = (k: keyof OrderForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((s) => ({ ...s, [k]: e.target.value }));
 
   const goConfirm = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canNext) return;
-    navigate('/order/confirm', { state: form });
+    // 必須チェック（最低限）
+    if (!form.client_name || !form.client_email || !form.city || !form.prefecture || !form.address2) {
+      alert('必須項目を入力してください。');
+      return;
+    }
+    navigate('/confirm', { state: { ...form, radius_km: RADIUS_KM } });
   };
 
   return (
-    <>
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-white">
       <Header />
-      <main className="max-w-3xl mx-auto px-4 py-10">
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <h1 className="text-2xl font-bold">オーダー詳細</h1>
-          <p className="text-gray-700 mt-2">{planLabel}</p>
-
-          <form onSubmit={goConfirm} className="mt-6 space-y-6">
-            {/* 日時 */}
-            <section>
-              <h2 className="font-semibold mb-3">ご希望日時</h2>
-              <div className="grid md:grid-cols-3 gap-4">
-                <div>
-                  <label className="text-sm text-gray-600">第一希望日時</label>
-                  <input type="datetime-local" className="input" value={form.date1} onChange={onChange('date1')} />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600">第二希望日時</label>
-                  <input type="datetime-local" className="input" value={form.date2} onChange={onChange('date2')} />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600">第三希望日時</label>
-                  <input type="datetime-local" className="input" value={form.date3} onChange={onChange('date3')} />
-                </div>
-              </div>
-            </section>
-
-            {/* 住所 */}
-            <section>
-              <h2 className="font-semibold mb-3">案件住所</h2>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm text-gray-600">郵便番号</label>
-                  <input placeholder="123-4567" className="input" value={form.postal} onChange={onChange('postal')} />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600">都道府県</label>
-                  <input placeholder="東京都" className="input" value={form.prefecture} onChange={onChange('prefecture')} />
-                </div>
-              </div>
-              <div className="grid md:grid-cols-2 gap-4 mt-4">
-                <div>
-                  <label className="text-sm text-gray-600">市区町村</label>
-                  <input placeholder="千代田区丸の内" className="input" value={form.city} onChange={onChange('city')} />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600">それ以降</label>
-                  <input placeholder="1-9-1 ○○ビル 10F" className="input" value={form.line1} onChange={onChange('line1')} />
-                </div>
-              </div>
-            </section>
-
-            {/* 発注者 */}
-            <section>
-              <h2 className="font-semibold mb-3">発注者情報</h2>
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="md:col-span-1">
-                  <label className="text-sm text-gray-600">氏名 *</label>
-                  <input className="input" value={form.client_name} onChange={onChange('client_name')} />
-                </div>
-                <div className="md:col-span-1">
-                  <label className="text-sm text-gray-600">Email *</label>
-                  <input type="email" className="input" value={form.client_email} onChange={onChange('client_email')} />
-                </div>
-                <div className="md:col-span-1">
-                  <label className="text-sm text-gray-600">電話</label>
-                  <input className="input" value={form.phone} onChange={onChange('phone')} />
-                </div>
-              </div>
-            </section>
-
-            {/* 任意 */}
-            <section>
-              <h2 className="font-semibold mb-3">任意</h2>
-              <div className="grid md:grid-cols-1 gap-4">
-                <div>
-                  <label className="text-sm text-gray-600">集合場所（案件住所と違う場合）</label>
-                  <input className="input" value={form.meetup ?? ''} onChange={onChange('meetup')} />
-                </div>
-              </div>
-              <div className="mt-4">
-                <label className="text-sm text-gray-600">特記事項</label>
-                <textarea className="input h-28" value={form.note ?? ''} onChange={onChange('note')} />
-              </div>
-              {/* 通知半径は UI から除外（80km 固定） */}
-            </section>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={!canNext}
-                className={`rounded-lg px-4 py-2 text-white ${canNext ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-300 cursor-not-allowed'}`}
-              >
-                オーダー内容を確認
-              </button>
-            </div>
-          </form>
+      <main className="max-w-4xl mx-auto px-4 py-10">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">新規発注</h1>
+          <Link to="/dashboard" className="text-sm text-gray-600 hover:underline">ダッシュボードへ</Link>
         </div>
+
+        <div className="mt-2 text-gray-700">
+          {form.service && (
+            <div className="mb-2">
+              <span className="font-semibold">選択中：</span>
+              <span>{form.service} / {form.plan}（{form.price.toLocaleString()}円）</span>
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={goConfirm} className="mt-6 space-y-6">
+          {/* 希望日時 */}
+          <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold">ご希望日時</h2>
+            <div className="mt-4 grid md:grid-cols-3 gap-4">
+              <input className="input" type="datetime-local" value={form.prefer_datetime_1} onChange={onChange('prefer_datetime_1')} />
+              <input className="input" type="datetime-local" value={form.prefer_datetime_2} onChange={onChange('prefer_datetime_2')} />
+              <input className="input" type="datetime-local" value={form.prefer_datetime_3} onChange={onChange('prefer_datetime_3')} />
+            </div>
+          </section>
+
+          {/* 住所 */}
+          <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold">案件住所</h2>
+            <div className="mt-4 grid md:grid-cols-2 gap-4">
+              <input className="input" placeholder="郵便番号 例: 123-4567" value={form.postal} onChange={onChange('postal')} />
+              <input className="input" placeholder="都道府県" value={form.prefecture} onChange={onChange('prefecture')} />
+              <input className="input" placeholder="市区町村" value={form.city} onChange={onChange('city')} />
+              <input className="input" placeholder="それ以降" value={form.address2} onChange={onChange('address2')} />
+            </div>
+          </section>
+
+          {/* 連絡先 */}
+          <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold">ご連絡先</h2>
+            <div className="mt-4 grid md:grid-cols-2 gap-4">
+              <input className="input" placeholder="お名前 *" value={form.client_name} onChange={onChange('client_name')} />
+              <input className="input" placeholder="メール *" value={form.client_email} onChange={onChange('client_email')} />
+              <input className="input md:col-span-2" placeholder="電話番号" value={form.client_phone} onChange={onChange('client_phone')} />
+            </div>
+          </section>
+
+          {/* 集合場所・特記事項 */}
+          <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold">その他</h2>
+            <input className="input" placeholder="集合場所（案件住所と違う場合）" value={form.meetup} onChange={onChange('meetup')} />
+            <textarea className="input mt-4" placeholder="特記事項" rows={4} value={form.note} onChange={onChange('note')} />
+          </section>
+
+          <div className="flex items-center gap-3">
+            <button type="submit" className="rounded-xl bg-orange-600 text-white px-6 py-3 hover:bg-orange-700 transition">
+              オーダー内容の確認
+            </button>
+            <Link to="/services" className="text-gray-600 hover:underline">サービス一覧に戻る</Link>
+          </div>
+        </form>
       </main>
-    </>
+    </div>
   );
+}
+
+// Tailwind 合わせの簡易 input クラス
+declare global {
+  interface HTMLAttributes<T> {
+    className?: string;
+  }
 }
