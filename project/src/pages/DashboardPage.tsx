@@ -7,9 +7,7 @@ import { UserCircle, Camera } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user } = useAuth();
-
   const isPro = user?.role === 'professional';
-  const isCustomer = user?.role === 'customer';
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-white">
@@ -46,9 +44,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">撮影・案件一覧</h2>
-                  <p className="text-gray-600 mt-1">
-                    自分にアサインされた案件の一覧を確認できます。
-                  </p>
+                  <p className="text-gray-600 mt-1">自分にアサインされた案件の一覧を確認できます。</p>
                 </div>
               </div>
             </Link>
@@ -58,14 +54,13 @@ export default function DashboardPage() {
             <p className="text-gray-700">ようこそ、{user?.email} さん</p>
             <p className="text-gray-500 mt-1">ロール: {user?.role ?? '-'}</p>
 
-            {isCustomer && (
-              <div className="mt-6">
-                {/* 顧客だけ：新規発注ボタン */}
-                <Link to="/order/new" className="btn-primary">
-                  新規発注
-                </Link>
-              </div>
-            )}
+            {/* ▼ ここを /services に変更（最初にサービス一覧→各カテゴリー→オーダーへ） */}
+            <Link
+              to="/services?tab=photo"
+              className="inline-flex items-center gap-2 rounded-xl bg-gray-900 text-white px-4 py-2 mt-4 hover:opacity-90"
+            >
+              新規発注
+            </Link>
           </div>
         )}
       </main>
