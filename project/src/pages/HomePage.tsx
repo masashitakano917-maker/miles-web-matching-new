@@ -21,7 +21,7 @@ export default function HomePage() {
             }}
             aria-hidden="true"
           />
-          {/* 暗幕オーバーレイ（ヘッダーより後ろ） */}
+          {/* 暗幕オーバーレイ */}
           <div className="absolute inset-0 bg-black/55" aria-hidden="true" />
 
           {/* コンテンツ */}
@@ -254,7 +254,9 @@ export default function HomePage() {
           </div>
         </section>
       </main>
-
+    </div>
+  ); // ← 追加
+} // ← 追加
 
 /* ====== Sub components ====== */
 function Stat({
