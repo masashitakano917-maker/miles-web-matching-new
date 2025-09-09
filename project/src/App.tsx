@@ -1,20 +1,24 @@
 // project/src/App.tsx
 import React from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import ServicePage from './pages/ServicePage';
-import PlanSelectPage from './pages/PlanSelectPage'; // ★追加：プラン一覧ページ
+import PlanSelectPage from './pages/PlanSelectPage'; // プラン一覧
 
 // 旧: import OrderPage from './pages/OrderPage';
 import NewOrderPage from './pages/customer/NewOrderPage'; // 新しい発注フォーム
 
 import ConfirmationPage from './pages/ConfirmationPage';
 import DashboardPage from './pages/DashboardPage';
+
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProfessionalsPage from './pages/admin/ProfessionalsPage';
 import ProfessionalsListPage from './pages/admin/ProfessionalsListPage';
+
 import ProfilePage from './pages/professional/ProfilePage';
+
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -41,10 +45,9 @@ export default function App() {
   return (
     <AuthProvider>
       <Routes>
+        {/* 公開ページ */}
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
-
-        {/* サービス一覧（カード表示） */}
         <Route path="/services" element={<ServicePage />} />
 
         {/* プラン一覧（オレンジの「オーダーへ」から遷移） */}
@@ -82,7 +85,16 @@ export default function App() {
         />
 
         {/* 内容確認 */}
-        <Route path="/confirm" element={<ConfirmationPage />} />
+        <Route
+          path="/confirm"
+          element={
+            <RequireAuth>
+              <RequireRole role="customer">
+                <ConfirmationPage />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
 
         {/* ダッシュボード */}
         <Route
