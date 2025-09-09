@@ -5,19 +5,18 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { UserCircle, Camera } from 'lucide-react';
 
-type MyRequest = {
+type MyItem = {
   id: string;
   created_at?: string;
-  status?: string;
   plan_title?: string;
-  [k: string]: any;
+  status?: string;
 };
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const isPro = user?.role === 'professional';
 
-  const [reqs, setReqs] = useState<MyRequest[] | null>(null);
+  const [items, setItems] = useState<MyItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -27,15 +26,14 @@ export default function DashboardPage() {
       try {
         setLoading(true);
         setErr(null);
-        const res = await fetch(
-          `/api/my-requests?client_email=${encodeURIComponent(user.email || '')}`
-        );
+        const q = new URLSearchParams({ client_email: user.email || '' });
+        const res = await fetch(`/api/my-requests?${q.toString()}`);
         const json = await res.json();
-        if (!res.ok || !json?.ok) throw new Error(json?.error || 'failed to load');
-        setReqs(Array.isArray(json.requests) ? json.requests : []);
+        if (!res.ok || !json?.ok) throw new Error(json?.error || 'failed');
+        setItems(Array.isArray(json.items) ? json.items : []);
       } catch (e: any) {
         setErr(e?.message ?? '読み込みに失敗しました');
-        setReqs([]);
+        setItems([]);
       } finally {
         setLoading(false);
       }
@@ -46,24 +44,8 @@ export default function DashboardPage() {
   const fmt = (iso?: string) => {
     if (!iso) return '-';
     const d = new Date(iso);
-    const pad = (n: number) => String(n).toString().padStart(2, '0');
-    return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  };
-
-  const statusBadge = (s?: string) => {
-    const base = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium';
-    switch ((s || '').toLowerCase()) {
-      case 'matched':
-        return <span className={`${base} bg-green-100 text-green-700`}>マッチング中</span>;
-      case 'cancelled':
-      case 'canceled':
-        return <span className={`${base} bg-gray-100 text-gray-600`}>キャンセル</span>;
-      case 'done':
-      case 'completed':
-        return <span className={`${base} bg-blue-100 text-blue-700`}>完了</span>;
-      default:
-        return <span className={`${base} bg-orange-100 text-orange-700`}>受付中</span>;
-    }
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   };
 
   const hasCustomer = useMemo(() => !!user && !isPro, [user, isPro]);
@@ -86,9 +68,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">プロフィール</h2>
-                  <p className="text-gray-600 mt-1">
-                    Adminが登録したあなたの情報を確認・更新できます（ラベルは閲覧のみ）。
-                  </p>
+                  <p className="text-gray-600 mt-1">Adminが登録したあなたの情報を確認・更新できます。</p>
                 </div>
               </div>
             </Link>
@@ -103,7 +83,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">撮影・案件一覧</h2>
-                  <p className="text-gray-600 mt-1">自分にアサインされた案件の一覧を確認できます。</p>
+                  <p className="text-gray-600 mt-1">自分にアサインされた案件を確認できます。</p>
                 </div>
               </div>
             </Link>
@@ -132,37 +112,26 @@ export default function DashboardPage() {
                 {err && <div className="text-red-600 text-sm">読み込みエラー: {err}</div>}
 
                 {!loading && !err && (
-                  <>
-                    {(!reqs || reqs.length === 0) ? (
-                      <p className="text-gray-600">まだ依頼はありません。</p>
-                    ) : (
-                      <ul className="divide-y divide-gray-100">
-                        {reqs.map((r) => (
-                          <li key={r.id} className="py-4 flex items-center justify-between gap-4">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-medium text-gray-900 truncate">
-                                  {r.plan_title || '（プラン名 未設定）'}
-                                </span>
-                                {statusBadge(r.status)}
-                              </div>
-                              <div className="text-sm text-gray-500 mt-1">
-                                受付日時：{fmt(r.created_at)}
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
-                              disabled
-                              title="詳細画面は準備中です"
-                            >
-                              詳細
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </>
+                  items.length === 0 ? (
+                    <p className="text-gray-600">まだ依頼はありません。</p>
+                  ) : (
+                    <ul className="divide-y divide-gray-100">
+                      {items.map((r) => (
+                        <li key={r.id} className="py-4 flex items-center justify-between gap-4">
+                          <div className="min-w-0">
+                            <div className="font-medium text-gray-900 truncate">{r.plan_title || '（プラン名 未設定）'}</div>
+                            <div className="text-sm text-gray-500 mt-1">受付日時：{fmt(r.created_at)}</div>
+                          </div>
+                          <Link
+                            to={`/request/${r.id}`}
+                            className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
+                          >
+                            詳細
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )
                 )}
               </section>
             )}
