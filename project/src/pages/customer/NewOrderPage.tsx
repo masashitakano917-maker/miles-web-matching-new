@@ -1,223 +1,195 @@
 // project/src/pages/customer/NewOrderPage.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Header from '../../components/Header';
-import { Link, useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
-import { supabase } from '../../lib/supabase';
 
 type Form = {
-  client_name: string;
-  client_email: string;
+  // プラン情報
+  service: 'photo' | 'clean' | 'staff';
+  plan: string;
+  price: number;
+
+  // 日時（第一〜第三）
+  date1: string;
+  date2: string;
+  date3: string;
+
+  // 住所
   postal: string;
   prefecture: string;
   city: string;
-  address2: string;
-  note: string;
+  line1: string;
+
+  // 発注者
+  client_name: string;
+  client_email: string;
+  phone: string;
+
+  // 任意
+  meetup?: string;
+  note?: string;
+
+  // 通知半径（UIでは非表示・固定 80）
   radius_km: number;
 };
 
-const EMPTY: Form = {
-  client_name: '',
-  client_email: '',
+const EMPTY: Omit<Form, 'service' | 'plan' | 'price'> = {
+  date1: '',
+  date2: '',
+  date3: '',
   postal: '',
   prefecture: '',
   city: '',
-  address2: '',
+  line1: '',
+  client_name: '',
+  client_email: '',
+  phone: '',
+  meetup: '',
   note: '',
-  radius_km: 50,
-};
-
-const formatPostal = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 7);
-  return d.length >= 4 ? `${d.slice(0, 3)}-${d.slice(3)}` : d;
+  radius_km: 80, // ← 固定
 };
 
 export default function NewOrderPage(): JSX.Element {
-  const nav = useNavigate();
-  const [f, setF] = useState<Form>(EMPTY);
-  const [submitting, setSubmitting] = useState(false);
+  const [sp] = useSearchParams();
+  const navigate = useNavigate();
 
-  // サインイン中ユーザーのメールを自動セット（読み取り専用）
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      const email = data.user?.email ?? '';
-      setF((s) => ({ ...s, client_email: email }));
-    })();
-  }, []);
+  const service = (sp.get('service') as Form['service']) ?? 'photo';
+  const plan = sp.get('plan') ?? '';
+  const price = Number(sp.get('price') ?? 0);
 
-  const canSubmit = useMemo(() => {
-    return (
-      f.client_name.trim() &&
-      (f.client_email.trim() || '').length > 0 &&
-      (f.prefecture.trim() || f.city.trim() || f.address2.trim())
-    );
-  }, [f]);
+  const [form, setForm] = useState<Form>({ service, plan, price, ...EMPTY });
 
-  const onSubmit = async () => {
-    if (!canSubmit || submitting) return;
-    setSubmitting(true);
-    try {
-      const address = [
-        f.prefecture.trim(),
-        f.city.trim(),
-        f.address2.trim(),
-        f.postal.replace(/\s/g, ''),
-      ]
-        .filter(Boolean)
-        .join(' ');
+  const planLabel = useMemo(() => {
+    const map: Record<Form['service'], string> = {
+      photo: '写真撮影',
+      clean: '清掃サービス',
+      staff: '人材派遣',
+    };
+    return `${map[form.service]}｜${form.plan}（${form.price.toLocaleString()}円）`;
+  }, [form.service, form.plan, form.price]);
 
-      const payload = {
-        client_name: f.client_name.trim(),
-        client_email: f.client_email.trim(),
-        address,
-        note: f.note.trim(),
-        radius_km: f.radius_km,
-      };
+  const onChange =
+    (key: keyof Form) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      const v = e.target.value;
+      setForm((prev) => ({ ...prev, [key]: v }));
+    };
 
-      const res = await fetch('/api/matching?action=create_request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-        body: JSON.stringify(payload),
-        cache: 'no-store',
-      });
+  const canNext =
+    !!form.client_name &&
+    !!form.client_email &&
+    !!form.date1 &&
+    !!form.postal &&
+    !!form.prefecture &&
+    !!form.city &&
+    !!form.line1;
 
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok || !j?.ok) throw new Error(j?.error || '送信に失敗しました');
-
-      toast.success('発注を作成しました。近いプロに通知されます。');
-      nav('/dashboard', { replace: true });
-    } catch (e: any) {
-      toast.error(e?.message || '送信に失敗しました');
-    } finally {
-      setSubmitting(false);
-    }
+  const goConfirm = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canNext) return;
+    navigate('/order/confirm', { state: form });
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-white">
+    <>
       <Header />
-      <main className="max-w-4xl mx-auto px-4 lg:px-0 py-10 space-y-8">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">新規発注</h1>
-          <Link to="/dashboard" className="btn-ghost" aria-label="ダッシュボードへ">
-            ダッシュボードへ
-          </Link>
-        </div>
+      <main className="max-w-3xl mx-auto px-4 py-10">
+        <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <h1 className="text-2xl font-bold">オーダー詳細</h1>
+          <p className="text-gray-700 mt-2">{planLabel}</p>
 
-        <section className="rounded-2xl bg-white border border-gray-200 shadow-sm p-6 space-y-6">
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm text-gray-600">お名前 *</label>
-              <input
-                className="mt-1 input"
-                value={f.client_name}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setF((s) => ({ ...s, client_name: e.target.value }))
-                }
-                placeholder="山田 太郎"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600">メール *</label>
-              <input
-                className="mt-1 input bg-gray-50"
-                value={f.client_email}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setF((s) => ({ ...s, client_email: e.target.value }))
-                }
-                readOnly
-                placeholder="you@example.com"
-              />
-            </div>
+          <form onSubmit={goConfirm} className="mt-6 space-y-6">
+            {/* 日時 */}
+            <section>
+              <h2 className="font-semibold mb-3">ご希望日時</h2>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-sm text-gray-600">第一希望日時</label>
+                  <input type="datetime-local" className="input" value={form.date1} onChange={onChange('date1')} />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">第二希望日時</label>
+                  <input type="datetime-local" className="input" value={form.date2} onChange={onChange('date2')} />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">第三希望日時</label>
+                  <input type="datetime-local" className="input" value={form.date3} onChange={onChange('date3')} />
+                </div>
+              </div>
+            </section>
 
-            <div>
-              <label className="text-sm text-gray-600">郵便番号</label>
-              <input
-                className="mt-1 input"
-                value={f.postal}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setF((s) => ({ ...s, postal: formatPostal(e.target.value) }))
-                }
-                placeholder="123-4567"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600">都道府県</label>
-              <input
-                className="mt-1 input"
-                value={f.prefecture}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setF((s) => ({ ...s, prefecture: e.target.value }))
-                }
-                placeholder="東京都"
-              />
-            </div>
+            {/* 住所 */}
+            <section>
+              <h2 className="font-semibold mb-3">案件住所</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-gray-600">郵便番号</label>
+                  <input placeholder="123-4567" className="input" value={form.postal} onChange={onChange('postal')} />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">都道府県</label>
+                  <input placeholder="東京都" className="input" value={form.prefecture} onChange={onChange('prefecture')} />
+                </div>
+              </div>
+              <div className="grid md:grid-cols-2 gap-4 mt-4">
+                <div>
+                  <label className="text-sm text-gray-600">市区町村</label>
+                  <input placeholder="千代田区丸の内" className="input" value={form.city} onChange={onChange('city')} />
+                </div>
+                <div>
+                  <label className="text-sm text-gray-600">それ以降</label>
+                  <input placeholder="1-9-1 ○○ビル 10F" className="input" value={form.line1} onChange={onChange('line1')} />
+                </div>
+              </div>
+            </section>
 
-            <div>
-              <label className="text-sm text-gray-600">市区町村</label>
-              <input
-                className="mt-1 input"
-                value={f.city}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setF((s) => ({ ...s, city: e.target.value }))
-                }
-                placeholder="千代田区丸の内"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-600">それ以降</label>
-              <input
-                className="mt-1 input"
-                value={f.address2}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setF((s) => ({ ...s, address2: e.target.value }))
-                }
-                placeholder="1-9-1 ○○ビル 10F"
-              />
-            </div>
+            {/* 発注者 */}
+            <section>
+              <h2 className="font-semibold mb-3">発注者情報</h2>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="md:col-span-1">
+                  <label className="text-sm text-gray-600">氏名 *</label>
+                  <input className="input" value={form.client_name} onChange={onChange('client_name')} />
+                </div>
+                <div className="md:col-span-1">
+                  <label className="text-sm text-gray-600">Email *</label>
+                  <input type="email" className="input" value={form.client_email} onChange={onChange('client_email')} />
+                </div>
+                <div className="md:col-span-1">
+                  <label className="text-sm text-gray-600">電話</label>
+                  <input className="input" value={form.phone} onChange={onChange('phone')} />
+                </div>
+              </div>
+            </section>
 
-            <div className="md:col-span-2">
-              <label className="text-sm text-gray-600">依頼メモ</label>
-              <textarea
-                className="mt-1 input min-h-[100px]"
-                value={f.note}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                  setF((s) => ({ ...s, note: e.target.value }))
-                }
-                placeholder="ご希望の日時・内容など"
-              />
-            </div>
+            {/* 任意 */}
+            <section>
+              <h2 className="font-semibold mb-3">任意</h2>
+              <div className="grid md:grid-cols-1 gap-4">
+                <div>
+                  <label className="text-sm text-gray-600">集合場所（案件住所と違う場合）</label>
+                  <input className="input" value={form.meetup ?? ''} onChange={onChange('meetup')} />
+                </div>
+              </div>
+              <div className="mt-4">
+                <label className="text-sm text-gray-600">特記事項</label>
+                <textarea className="input h-28" value={form.note ?? ''} onChange={onChange('note')} />
+              </div>
+              {/* 通知半径は UI から除外（80km 固定） */}
+            </section>
 
-            <div>
-              <label className="text-sm text-gray-600">通知する半径（km）</label>
-              <select
-                className="mt-1 input"
-                value={f.radius_km}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                  setF((s) => ({ ...s, radius_km: Number(e.target.value) }))
-                }
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={!canNext}
+                className={`rounded-lg px-4 py-2 text-white ${canNext ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-300 cursor-not-allowed'}`}
               >
-                {[10, 20, 30, 50, 80].map((n) => (
-                  <option key={n} value={n}>
-                    {n} km
-                  </option>
-                ))}
-              </select>
+                オーダー内容を確認
+              </button>
             </div>
-          </div>
-
-          <div className="pt-2">
-            <button
-              onClick={onSubmit}
-              disabled={!canSubmit || submitting}
-              className="btn-primary disabled:opacity-60"
-            >
-              {submitting ? '送信中…' : '発注する'}
-            </button>
-          </div>
-        </section>
+          </form>
+        </div>
       </main>
-    </div>
+    </>
   );
 }
