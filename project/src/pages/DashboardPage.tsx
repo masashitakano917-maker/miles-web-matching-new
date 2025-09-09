@@ -8,12 +8,8 @@ import { UserCircle, Camera } from 'lucide-react';
 type MyRequest = {
   id: string;
   created_at?: string;
-  status?: string;        // 例: 'pending' | 'matched' | 'cancelled' など
-  service?: string;       // 'photo' | 'clean' | 'staff' 等
-  plan_key?: string;      // '20' | '30' | '1ldk' … 等
-  plan_title?: string;    // 表示用タイトルがあれば利用
-  note?: string;
-  // ほか DB 由来の任意フィールドが来ても any で吸収
+  status?: string;
+  plan_title?: string;
   [k: string]: any;
 };
 
@@ -21,23 +17,21 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const isPro = user?.role === 'professional';
 
-  // ------- 顧客の依頼一覧（最小版） -------
   const [reqs, setReqs] = useState<MyRequest[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user || isPro) return; // プロは読み込まない
+    if (!user || isPro) return;
     const run = async () => {
       try {
         setLoading(true);
         setErr(null);
-        // API 側に用意してある想定の一覧取得アクション
-        const res = await fetch('/api/matching?action=list_my_requests');
+        const res = await fetch(
+          `/api/my-requests?client_email=${encodeURIComponent(user.email || '')}`
+        );
         const json = await res.json();
-        if (!res.ok || !json?.ok) {
-          throw new Error(json?.error || 'failed to load');
-        }
+        if (!res.ok || !json?.ok) throw new Error(json?.error || 'failed to load');
         setReqs(Array.isArray(json.requests) ? json.requests : []);
       } catch (e: any) {
         setErr(e?.message ?? '読み込みに失敗しました');
@@ -52,16 +46,8 @@ export default function DashboardPage() {
   const fmt = (iso?: string) => {
     if (!iso) return '-';
     const d = new Date(iso);
-    const pad = (n: number) => String(n).padStart(2, '0');
+    const pad = (n: number) => String(n).toString().padStart(2, '0');
     return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  };
-
-  const planLabel = (r: MyRequest) => {
-    if (r.plan_title) return r.plan_title;
-    // ざっくりフォールバック（表示用）
-    const sv = r.service ?? '';
-    const key = r.plan_key ? ` / ${r.plan_key}` : '';
-    return `${sv}${key}`;
   };
 
   const statusBadge = (s?: string) => {
@@ -124,7 +110,6 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="space-y-8">
-            {/* 顧客のウェルカムと新規発注 */}
             <div className="rounded-2xl border border-gray-100 bg-white shadow-sm p-6">
               <p className="text-gray-700">ようこそ、{user?.email} さん</p>
               <p className="text-gray-500 mt-1">ロール: {user?.role ?? '-'}</p>
@@ -137,7 +122,6 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            {/* 顧客：自分の依頼一覧（最小版） */}
             {hasCustomer && (
               <section className="rounded-2xl border border-gray-100 bg-white shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
@@ -158,7 +142,7 @@ export default function DashboardPage() {
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-medium text-gray-900 truncate">
-                                  {planLabel(r)}
+                                  {r.plan_title || '（プラン名 未設定）'}
                                 </span>
                                 {statusBadge(r.status)}
                               </div>
@@ -166,7 +150,6 @@ export default function DashboardPage() {
                                 受付日時：{fmt(r.created_at)}
                               </div>
                             </div>
-                            {/* 詳細ページは別タスク想定。リンク先は後で差し替え */}
                             <button
                               type="button"
                               className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50"
