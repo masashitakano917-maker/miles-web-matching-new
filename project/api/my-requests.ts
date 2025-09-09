@@ -1,49 +1,26 @@
 // project/api/my-requests.ts
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE!
-);
+const SUPABASE_URL =
+  process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
+const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE || '';
+const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
 
-// [サービス] ... が note の先頭行に入っている想定なので、表示用タイトルを抽出
-function extractPlanTitle(note?: string | null): string | null {
-  if (!note) return null;
-  const line = note.split('\n').find((l) => l.startsWith('[サービス]'));
-  if (!line) return null;
-  return line.replace(/^\[サービス\]\s*/, '').trim();
-}
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Cache-Control', 'no-store');
 
-export default async function handler(req: any, res: any) {
-  try {
-    if (req.method !== 'GET') {
-      return res.status(405).json({ ok: false, error: 'method not allowed' });
-    }
-
-    const email = String(req.query.client_email || '').trim().toLowerCase();
-    if (!email) {
-      return res.status(400).json({ ok: false, error: 'client_email required' });
-    }
-
-    const { data, error } = await supabase
-      .from('requests')
-      .select('id, created_at, status, note')
-      .eq('client_email', email)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    if (error) throw error;
-
-    const requests = (data || []).map((r) => ({
-      id: r.id,
-      created_at: r.created_at,
-      status: r.status ?? 'pending',
-      plan_title: extractPlanTitle(r.note),
-      // 必要ならここに追加フィールドを載せる
-    }));
-
-    return res.status(200).json({ ok: true, requests });
-  } catch (e: any) {
-    return res.status(500).json({ ok: false, error: e?.message ?? 'server error' });
+  const client_email = String(req.query.client_email || '');
+  if (!client_email) {
+    return res.status(400).json({ ok: false, error: 'missing client_email' });
   }
+
+  const { data, error } = await sb
+    .from('orders') // 顧客用一覧は orders を参照
+    .select('id, address, note, created_at')
+    .eq('client_email', client_email)
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ ok: false, error: error.message });
+  return res.status(200).json({ ok: true, items: data ?? [] });
 }
