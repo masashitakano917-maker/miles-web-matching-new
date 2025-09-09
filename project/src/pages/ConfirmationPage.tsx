@@ -1,128 +1,116 @@
 // project/src/pages/ConfirmationPage.tsx
 import React, { useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 
-type FormState = {
-  service: 'photo' | 'clean' | 'staff';
+type ConfirmState = {
+  service: string;
   plan: string;
   price: number;
-  date1: string; date2: string; date3: string;
-  postal: string; prefecture: string; city: string; line1: string;
-  client_name: string; client_email: string; phone: string;
-  meetup?: string; note?: string;
-  radius_km: number; // 受け取りはするが画面表示はしない（固定80）
+  prefer_datetime_1: string;
+  prefer_datetime_2: string;
+  prefer_datetime_3: string;
+  postal: string;
+  prefecture: string;
+  city: string;
+  address2: string;
+  client_name: string;
+  client_email: string;
+  client_phone: string;
+  meetup: string;
+  note: string;
+  radius_km: number;
 };
 
-export default function ConfirmationPage(): JSX.Element {
-  const nav = useNavigate();
-  const { state } = useLocation();
-  const data = state as FormState | undefined;
+export default function ConfirmationPage() {
+  const { state } = useLocation() as { state?: ConfirmState };
+  const navigate = useNavigate();
+  const [sending, setSending] = useState(false);
+  const payload = useMemo(() => state, [state]);
 
-  const [submitting, setSubmitting] = useState(false);
-  const address = useMemo(() => `${data?.prefecture ?? ''}${data?.city ?? ''}${data?.line1 ?? ''}`, [data]);
-
-  if (!data) {
-    return (
-      <>
-        <Header />
-        <main className="max-w-3xl mx-auto px-4 py-10">
-          <div className="rounded-xl border bg-white p-6">入力データが見つかりません。最初からやり直してください。</div>
-        </main>
-      </>
-    );
+  if (!payload) {
+    // 直接アクセス時は発注フォームへ戻す
+    navigate('/order', { replace: true });
+    return null;
   }
 
-  const submit = async (): Promise<void> => {
-    setSubmitting(true);
-    try {
-      const noteLines = [
-        `【プラン】${data.plan} / ${data.price.toLocaleString()}円`,
-        `【第一希望】${data.date1 || '-'}`,
-        `【第二希望】${data.date2 || '-'}`,
-        `【第三希望】${data.date3 || '-'}`,
-        `【電話】${data.phone || '-'}`,
-        data.meetup ? `【集合場所】${data.meetup}` : '',
-        data.note ? `【特記事項】${data.note}` : '',
-      ].filter(Boolean);
+  const fullAddress = `${payload.prefecture}${payload.city}${payload.address2}`;
 
+  const submit = async () => {
+    try {
+      setSending(true);
       const res = await fetch('/api/matching?action=create_request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          client_name: data.client_name,
-          client_email: data.client_email,
-          address,
-          note: noteLines.join('\n'),
-          radius_km: 80, // ← 常に 80km で送信
+          client_name: payload.client_name,
+          client_email: payload.client_email,
+          address: fullAddress,
+          note: [
+            `[サービス] ${payload.service} / ${payload.plan}（${payload.price.toLocaleString()}円）`,
+            `[希望日時] ${payload.prefer_datetime_1 || '-'} / ${payload.prefer_datetime_2 || '-'} / ${payload.prefer_datetime_3 || '-'}`,
+            payload.meetup ? `[集合場所] ${payload.meetup}` : '',
+            payload.client_phone ? `[電話] ${payload.client_phone}` : '',
+            payload.note ? `[特記事項] ${payload.note}` : '',
+          ].filter(Boolean).join('\n'),
+          radius_km: payload.radius_km,
         }),
       });
-
       const json = await res.json();
-      if (!res.ok || !json?.ok) {
-        alert(`作成に失敗しました：${json?.error ?? 'unknown'}`);
-        setSubmitting(false);
-        return;
-      }
-      alert('オーダーを受け付けました。近いプロへ順次通知します。');
-      nav('/dashboard', { replace: true });
-    } catch {
-      alert('通信に失敗しました。時間をおいてお試しください。');
-      setSubmitting(false);
+      if (!res.ok || !json.ok) throw new Error(json.error || 'failed');
+      // 成功 → ダッシュボードへ
+      navigate('/dashboard', { replace: true });
+    } catch (e) {
+      alert('送信に失敗しました。時間をおいて再度お試しください。');
+    } finally {
+      setSending(false);
     }
   };
 
   return (
-    <>
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-white">
       <Header />
-      <main className="max-w-3xl mx-auto px-4 py-10">
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <h1 className="text-2xl font-bold mb-4">オーダー内容の確認</h1>
+      <main className="max-w-4xl mx-auto px-4 py-10">
+        <h1 className="text-2xl font-bold">オーダー内容の確認</h1>
 
-          <div className="space-y-3 text-gray-800">
-            <Row label="プラン">
-              {data.plan}（{data.price.toLocaleString()}円）
-            </Row>
-            <Row label="第一希望日時">{data.date1 || '-'}</Row>
-            <Row label="第二希望日時">{data.date2 || '-'}</Row>
-            <Row label="第三希望日時">{data.date3 || '-'}</Row>
-            <Row label="案件住所">
-              {data.postal}／{address}
-            </Row>
-            <Row label="氏名">{data.client_name}</Row>
-            <Row label="Email">{data.client_email}</Row>
-            <Row label="電話">{data.phone || '-'}</Row>
-            <Row label="集合場所">{data.meetup || '-'}</Row>
-            <Row label="特記事項">{data.note || '-'}</Row>
-            {/* 通知半径の行は表示しない */}
+        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm mt-6">
+          <h2 className="text-lg font-semibold">選択プラン</h2>
+          <div className="mt-2 text-gray-800">
+            {payload.service} / {payload.plan}（{payload.price.toLocaleString()}円）
           </div>
+        </section>
 
-          <div className="flex justify-end gap-3 mt-8">
-            <button onClick={() => nav(-1)} className="rounded-lg px-4 py-2 border hover:bg-gray-50">
-              編集
-            </button>
-            <button onClick={() => nav('/dashboard', { replace: true })} className="rounded-lg px-4 py-2 border hover:bg-gray-50">
-              キャンセル
-            </button>
-            <button
-              onClick={submit}
-              disabled={submitting}
-              className={`rounded-lg px-4 py-2 text-white ${submitting ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-            >
-              {submitting ? '送信中…' : 'オーダー確定'}
-            </button>
-          </div>
+        <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm mt-6">
+          <h2 className="text-lg font-semibold">内容</h2>
+          <ul className="mt-2 text-gray-800 space-y-1">
+            <li>希望日時: {payload.prefer_datetime_1 || '-'} / {payload.prefer_datetime_2 || '-'} / {payload.prefer_datetime_3 || '-'}</li>
+            <li>住所: {payload.postal} {payload.prefecture}{payload.city}{payload.address2}</li>
+            {payload.meetup && <li>集合場所: {payload.meetup}</li>}
+            <li>氏名: {payload.client_name}</li>
+            <li>Email: {payload.client_email}</li>
+            {payload.client_phone && <li>電話: {payload.client_phone}</li>}
+            {payload.note && <li>特記事項: {payload.note}</li>}
+            <li>通知半径: {payload.radius_km} km</li>
+          </ul>
+        </section>
+
+        <div className="mt-8 flex items-center gap-3">
+          <button
+            onClick={submit}
+            disabled={sending}
+            className="rounded-xl bg-orange-600 text-white px-6 py-3 hover:bg-orange-700 disabled:opacity-60"
+          >
+            {sending ? '送信中…' : 'オーダー送信'}
+          </button>
+          <button
+            onClick={() => navigate('/order', { state: payload })}
+            className="rounded-xl border border-gray-300 bg-white px-6 py-3 hover:bg-gray-50"
+          >
+            編集に戻る
+          </button>
+          <Link to="/dashboard" className="text-gray-600 hover:underline">キャンセル</Link>
         </div>
       </main>
-    </>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-3 gap-4">
-      <div className="text-gray-500">{label}</div>
-      <div className="col-span-2">{children}</div>
     </div>
   );
 }
