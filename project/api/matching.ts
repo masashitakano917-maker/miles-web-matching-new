@@ -1,213 +1,222 @@
 // project/api/matching.ts
-import { createClient } from '@supabase/supabase-js';
+import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { createClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE!
-);
+const SUPABASE_URL =
+  process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || ''
+const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE || ''
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || ''
+const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
+const MAIL_FROM = process.env.MAIL_FROM || 'noreply@example.com'
 
-const RADIUS_KM_DEFAULT = 50;
-const WAIT_MINUTES = 7;
+// 80km固定
+const RADIUS_KM = 80
 
-export default async function handler(req: any, res: any) {
-  try {
-    const action = String(req.query.action || '').toLowerCase();
+const sb = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
+  auth: { persistSession: false },
+})
 
-    if (req.method === 'POST' && action === 'create_request') {
-      // ===== ① 発注作成（住所→緯度経度→requests作成→最初の候補に通知） =====
-      const { client_name, client_email, address, note, radius_km } = req.body || {};
-      if (!client_name || !client_email || !address) {
-        return res.status(400).json({ ok: false, error: 'client_name, client_email, address are required' });
-      }
-      const { lat, lng } = await geocode(address);
+type CreatePayload = {
+  user_id?: string
+  client_name: string
+  client_email: string
+  phone?: string
+  postal?: string
+  prefecture?: string
+  city?: string
+  address2?: string
+  note?: string
+  service: 'photo' | 'clean' | 'staff'
+  plan_key: string // '20' | '30' | など
+  plan_title?: string
+  first_pref_at?: string
+  second_pref_at?: string
+  third_pref_at?: string
+}
 
-      const { data: request, error: reqErr } = await supabase
-        .from('requests')
-        .insert([{ client_name, client_email, address, lat, lng, note }])
-        .select('*')
-        .single();
-      if (reqErr) throw reqErr;
+function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number) {
+  const toRad = (v: number) => (v * Math.PI) / 180
+  const R = 6371
+  const dLat = toRad(bLat - aLat)
+  const dLng = toRad(bLng - aLng)
+  const la1 = toRad(aLat)
+  const la2 = toRad(bLat)
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(x))
+}
 
-      await matchNext(request.id, radius_km ?? RADIUS_KM_DEFAULT);
-      return res.status(200).json({ ok: true, request });
-    }
+async function geocode(addr: string) {
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+    addr,
+  )}&key=${GOOGLE_MAPS_API_KEY}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('Geocoding failed')
+  const json = (await res.json()) as any
+  const loc = json?.results?.[0]?.geometry?.location
+  if (!loc) throw new Error('Geocoding: zero_results')
+  return { lat: loc.lat as number, lng: loc.lng as number }
+}
 
-    if (req.method === 'POST' && action === 'match_next') {
-      // ===== ② 次の候補に通知（手動/内部呼び出し） =====
-      const { request_id, radius_km } = req.body || {};
-      if (!request_id) return res.status(400).json({ ok: false, error: 'request_id required' });
-      const ok = await matchNext(request_id, radius_km ?? RADIUS_KM_DEFAULT);
-      return res.status(200).json({ ok });
-    }
-
-    if (req.method === 'GET' && action === 'respond') {
-      // ===== ③ プロの応答（accept / reject） =====
-      const id = String(req.query.id || '');
-      const status = String(req.query.status || '').toLowerCase(); // accept | reject
-      if (!id || !['accept', 'reject'].includes(status)) {
-        return res.status(400).send('Bad Request');
-      }
-
-      const { data: match } = await supabase.from('matches').select('*').eq('id', id).single();
-      if (!match) return res.status(404).send('Not Found');
-
-      const { data: request } = await supabase.from('requests').select('*').eq('id', match.request_id).single();
-      if (!request || request.status !== 'pending') {
-        return res.status(200).send('この依頼はすでに締切済みです。');
-      }
-
-      // 有効期限チェック
-      if (match.status !== 'waiting' || (match.expires_at && new Date(match.expires_at) < new Date())) {
-        return res.status(200).send('このリンクは有効期限切れです。');
-      }
-
-      if (status === 'accept') {
-        await supabase.from('matches').update({ status: 'accepted' }).eq('id', id);
-        await supabase.from('requests').update({ status: 'matched' }).eq('id', match.request_id);
-        await supabase.from('matches')
-          .update({ status: 'expired' })
-          .eq('request_id', match.request_id)
-          .neq('id', id);
-
-        return res.status(200).send('ありがとうございます。マッチが成立しました。');
-      } else {
-        await supabase.from('matches').update({ status: 'rejected' }).eq('id', id);
-        await matchNext(match.request_id, RADIUS_KM_DEFAULT);
-        return res.status(200).send('辞退を受け付けました。次の候補へ連絡します。');
-      }
-    }
-
-    if (req.method === 'POST' && action === 'check_expired') {
-      // ===== ④ 期限切れチェック（Cron想定） =====
-      const nowIso = new Date().toISOString();
-      const { data: waiting, error } = await supabase
-        .from('matches')
-        .select('id, request_id, expires_at, status')
-        .eq('status', 'waiting')
-        .lt('expires_at', nowIso);
-      if (error) throw error;
-
-      const targetReq = new Set<string>();
-      for (const m of waiting || []) {
-        await supabase.from('matches').update({ status: 'expired' }).eq('id', m.id);
-        targetReq.add(m.request_id);
-      }
-      for (const request_id of targetReq) {
-        const { data: reqRow } = await supabase.from('requests').select('status').eq('id', request_id).single();
-        if (reqRow?.status === 'pending') {
-          await matchNext(request_id, RADIUS_KM_DEFAULT);
-        }
-      }
-      return res.status(200).json({ ok: true, expired: (waiting || []).length });
-    }
-
-    return res.status(404).json({ ok: false, error: 'Not Found' });
-  } catch (e: any) {
-    return res.status(500).json({ ok: false, error: e?.message || 'internal_error' });
+async function getRequiredLabels(service: string, plan_key: string) {
+  const { data, error } = await sb
+    .from('plan_requirements')
+    .select('required_labels,title')
+    .eq('service', service)
+    .eq('plan_key', plan_key)
+    .single()
+  if (error) throw error
+  return {
+    labels: (data?.required_labels || []) as string[],
+    title: (data?.title as string) || '',
   }
 }
 
-/** 住所 → 緯度経度 */
-async function geocode(address: string): Promise<{ lat: number; lng: number }> {
-  const key = process.env.GOOGLE_MAPS_API_KEY!;
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${key}`;
-  const r = await fetch(url);
-  const j: any = await r.json();
-  if (j.status !== 'OK' || !j.results?.[0]) throw new Error(`Geocoding failed: ${j.status}`);
-  const { lat, lng } = j.results[0].geometry.location;
-  return { lat, lng };
-}
-
-/** 次の候補に通知して waiting を作る */
-async function matchNext(request_id: string, radius_km: number): Promise<boolean> {
-  // リクエスト確認
-  const { data: request } = await supabase.from('requests').select('*').eq('id', request_id).single();
-  if (!request || request.status !== 'pending') return false;
-
-  // 既に通知済みのプロ一覧
-  const { data: notified } = await supabase
-    .from('matches')
-    .select('professional_id')
-    .eq('request_id', request_id);
-  const notifiedIds = new Set((notified || []).map((r: any) => r.professional_id));
-
-  // 半径内候補を距離順で取得
-  const { data: pros, error: prosErr } = await supabase.rpc('find_nearby_pros', {
-    lat: request.lat,
-    lng: request.lng,
-    radius_km,
-  });
-  if (prosErr) throw prosErr;
-
-  const next = (pros || []).find((p: any) => !notifiedIds.has(p.id));
-  if (!next) return false;
-
-  const expires_at = new Date(Date.now() + WAIT_MINUTES * 60 * 1000).toISOString();
-  const { data: match, error: mErr } = await supabase
-    .from('matches')
-    .insert([{ request_id, professional_id: next.id, expires_at }])
-    .select('*')
-    .single();
-  if (mErr) throw mErr;
-
-  const linkAccept = `${process.env.APP_BASE_URL}/api/matching?action=respond&id=${match.id}&status=accept`;
-  const linkReject = `${process.env.APP_BASE_URL}/api/matching?action=respond&id=${match.id}&status=reject`;
-
-  await Promise.all([
-    sendLine(next.line_user_id, request, linkAccept, linkReject).catch(() => null),
-    sendEmail(next.email, request, linkAccept, linkReject).catch(() => null),
-  ]);
-
-  return true;
-}
-
-/** メール送信（Resend） */
-async function sendEmail(to: string | null, request: any, acceptUrl: string, rejectUrl: string) {
-  if (!to) return;
-  const apiKey = process.env.RESEND_API_KEY!;
-  const from = process.env.MAIL_FROM || 'no-reply@miles.example';
-  const resp = await fetch('https://api.resend.com/emails', {
+async function notifyByEmail(to: string, subject: string, text: string) {
+  if (!RESEND_API_KEY) return
+  await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({
-      from,
-      to,
-      subject: '【Miles】新規撮影依頼のご案内',
-      html: `
-        <p>近くで新しい撮影依頼が届きました。</p>
-        <p><b>住所:</b> ${request.address}</p>
-        <p>
-          <a href="${acceptUrl}">✅ 受ける</a>　
-          <a href="${rejectUrl}">❌ 見送る</a>
-        </p>
-        <p>※このリンクは他の方が確定すると無効になります。</p>
-      `,
+      from: MAIL_FROM,
+      to: [to],
+      subject,
+      text,
     }),
-  });
-  if (!resp.ok) throw new Error('email_failed');
+  })
 }
 
-/** LINE送信 */
-async function sendLine(lineUserId: string | null, request: any, acceptUrl: string, rejectUrl: string) {
-  if (!lineUserId) return;
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN!;
-  const resp = await fetch('https://api.line.me/v2/bot/message/push', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({
-      to: lineUserId,
-      messages: [
-        {
-          type: 'text',
-          text:
-            `【Miles】近くで新規撮影依頼\n` +
-            `住所: ${request.address}\n\n` +
-            `受ける: ${acceptUrl}\n` +
-            `見送る: ${rejectUrl}\n\n` +
-            `※他の方が確定するとリンクは無効になります。`,
-        },
-      ],
-    }),
-  });
-  if (!resp.ok) throw new Error('line_failed');
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  try {
+    const action = String(req.query.action || '')
+
+    // ========== 依頼作成 ==========
+    if (req.method === 'POST' && action === 'create_request') {
+      const b = req.body as CreatePayload
+
+      // 住所テキストを一体化してジオコーディング
+      const addressText = [b.postal, b.prefecture, b.city, b.address2]
+        .filter(Boolean)
+        .join(' ')
+      const { lat, lng } = await geocode(addressText)
+
+      // 必要ラベルの取得
+      const { labels: required_labels, title: prTitle } = await getRequiredLabels(
+        b.service,
+        b.plan_key,
+      )
+
+      // 依頼を保存（存在しないカラムは無視せず落ちるので“安全に”揃えてあります）
+      const { data: inserted, error: insErr } = await sb
+        .from('requests')
+        .insert([
+          {
+            user_id: b.user_id || null,
+            client_name: b.client_name,
+            client_email: b.client_email,
+            phone: b.phone || null,
+            postal: b.postal || null,
+            prefecture: b.prefecture || null,
+            city: b.city || null,
+            address2: b.address2 || null,
+            note: b.note || null,
+            service: b.service,
+            plan_key: b.plan_key,
+            plan_title: b.plan_title || prTitle,
+            first_pref_at: b.first_pref_at ? new Date(b.first_pref_at) : null,
+            second_pref_at: b.second_pref_at ? new Date(b.second_pref_at) : null,
+            third_pref_at: b.third_pref_at ? new Date(b.third_pref_at) : null,
+            lat,
+            lng,
+            status: 'open',
+          },
+        ])
+        .select('id,plan_title,service,plan_key,client_name,client_email,lat,lng')
+        .single()
+      if (insErr) throw insErr
+
+      // プロ候補を絞り込み（必要ラベル ⊆ labels & 80km以内）
+      const { data: pros, error: prosErr } = await sb
+        .from('professionals')
+        .select('id,name,email,lat,lng,labels')
+        .contains('labels', required_labels)
+      if (prosErr) throw prosErr
+
+      const ranked =
+        pros
+          ?.map((p: any) => ({
+            ...p,
+            km: haversineKm(lat, lng, p.lat, p.lng),
+          }))
+          .filter((p) => p.km <= RADIUS_KM)
+          .sort((a, b) => a.km - b.km) ?? []
+
+      // 上位にメール通知（Resend）
+      const subject = `【Miles】新着依頼: ${inserted.plan_title}（近い順に通知）`
+      const body = [
+        `依頼者: ${inserted.client_name} (${inserted.client_email})`,
+        `サービス: ${inserted.service} / プラン: ${inserted.plan_key} (${inserted.plan_title})`,
+        `住所: ${addressText}`,
+        b.first_pref_at ? `第一希望: ${b.first_pref_at}` : '',
+        b.second_pref_at ? `第二希望: ${b.second_pref_at}` : '',
+        b.third_pref_at ? `第三希望: ${b.third_pref_at}` : '',
+        b.note ? `メモ: ${b.note}` : '',
+        `検索半径: ${RADIUS_KM}km`,
+      ]
+        .filter(Boolean)
+        .join('\n')
+
+      await Promise.all(
+        ranked.slice(0, 10).map((p: any) => notifyByEmail(p.email, subject, body)),
+      )
+
+      return res.status(200).json({
+        ok: true,
+        request: inserted,
+        notified: ranked.slice(0, 10).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          email: p.email,
+          km: Math.round(p.km * 10) / 10,
+        })),
+      })
+    }
+
+    // ========== 顧客の依頼一覧 ==========
+    if (req.method === 'GET' && action === 'customer_requests') {
+      const email = String(req.query.email || '')
+      if (!email) return res.status(400).json({ ok: false, error: 'email required' })
+      const { data, error } = await sb
+        .from('requests')
+        .select(
+          'id,created_at,status,service,plan_key,plan_title,first_pref_at,second_pref_at,third_pref_at,postal,prefecture,city,address2,note',
+        )
+        .eq('client_email', email)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return res.status(200).json({ ok: true, items: data })
+    }
+
+    // ========== 全依頼（Admin向け・簡易） ==========
+    if (req.method === 'GET' && action === 'admin_requests') {
+      const { data, error } = await sb
+        .from('requests')
+        .select(
+          'id,created_at,status,service,plan_key,plan_title,client_name,client_email,postal,prefecture,city,address2',
+        )
+        .order('created_at', { ascending: false })
+        .limit(200)
+      if (error) throw error
+      return res.status(200).json({ ok: true, items: data })
+    }
+
+    return res.status(404).json({ ok: false, error: 'unknown route' })
+  } catch (e: any) {
+    console.error(e)
+    return res.status(500).json({ ok: false, error: e?.message || 'server error' })
+  }
 }
