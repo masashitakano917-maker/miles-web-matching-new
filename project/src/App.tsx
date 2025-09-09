@@ -4,7 +4,10 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import ServicePage from './pages/ServicePage';
-import OrderPage from './pages/OrderPage';
+
+// 旧: import OrderPage from './pages/OrderPage';
+import NewOrderPage from './pages/customer/NewOrderPage'; // ★追加（新しい発注フォーム）
+
 import ConfirmationPage from './pages/ConfirmationPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -12,9 +15,6 @@ import ProfessionalsPage from './pages/admin/ProfessionalsPage';
 import ProfessionalsListPage from './pages/admin/ProfessionalsListPage';
 import ProfilePage from './pages/professional/ProfilePage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-
-// ★ 追加: 顧客の新規発注ページ
-import NewOrderPage from './pages/customer/NewOrderPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -41,13 +41,23 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/" element={<HomePage />} />
-
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/services" element={<ServicePage />} />
-        <Route path="/order" element={<OrderPage />} />
-        <Route path="/confirm" element={<ConfirmationPage />} />
 
-        {/* ★ 追加: 顧客がログイン後に使う本番用の新規発注ページ */}
+        {/* サービス一覧（カード→カテゴリ→プラン→オーダーへ） */}
+        <Route path="/services" element={<ServicePage />} />
+
+        {/* ★「/order」を新しい発注ページに割り当て（サービスページのリンクをそのまま活かす） */}
+        <Route
+          path="/order"
+          element={
+            <RequireAuth>
+              <RequireRole role="customer">
+                <NewOrderPage />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+        {/* エイリアス：/order/new でも同じページを表示（どちらでもOK） */}
         <Route
           path="/order/new"
           element={
@@ -58,6 +68,8 @@ export default function App() {
             </RequireAuth>
           }
         />
+
+        <Route path="/confirm" element={<ConfirmationPage />} />
 
         <Route
           path="/dashboard"
@@ -100,7 +112,7 @@ export default function App() {
           }
         />
 
-        {/* Professional */}
+        {/* Professional 本人ページ */}
         <Route
           path="/professional/profile"
           element={
