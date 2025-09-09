@@ -19,11 +19,11 @@ export default function Footer() {
 
         <div className="relative z-10 text-center text-white px-4 max-w-4xl mx-auto">
           <h2 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
-            Start Your Journey with <span className="block text-yellow-300">Miles</span>
+            Start Your Order with <span className="block text-yellow-300">Miles</span>
           </h2>
 
           <p className="text-xl md:text-2xl mb-8 opacity-90 leading-relaxed">
-            Join thousands of travelers who've discovered authentic experiences through local
+            Quick ideal matching for your needs
             connections
           </p>
 
@@ -47,7 +47,7 @@ export default function Footer() {
             <div className="md:col-span-1">
               <h3 className="text-2xl font-bold text-orange-400 mb-4">Miles</h3>
               <p className="text-gray-400 leading-relaxed">
-                Connecting travelers with authentic local experiences worldwide.
+                Connecting you with experienced professionals.
               </p>
             </div>
 
