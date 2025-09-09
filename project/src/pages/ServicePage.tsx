@@ -1,99 +1,135 @@
-import React from 'react';
-import { NavLink, useNavigate, useSearchParams } from 'react-router-dom';
+// project/src/pages/ServicePage.tsx
+import React, { useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import Header from '../components/Header';
+import { Camera, ShieldCheck, Users } from 'lucide-react';
 
-type Plan = { name: string; price: number; unit?: string; extra?: string };
-type Category = { key: string; title: string; plans: Plan[] };
+type TabKey = 'photo' | 'clean' | 'staff';
 
-const PHOTO_CATEGORIES: Category[] = [
+const TABS: { key: TabKey; label: string; desc: string; icon: React.ComponentType<any> }[] = [
   {
-    key: 'realestate',
-    title: '不動産物件撮影',
-    plans: [
-      { name: '20枚納品', price: 20000, extra: '追加1枚 1,000円' },
-      { name: '30枚納品', price: 29000, extra: '追加1枚 1,000円' },
-      { name: '40枚納品', price: 39000, extra: '追加1枚 1,000円' },
-    ],
+    key: 'photo',
+    label: 'プロフェッショナル写真撮影',
+    desc: '不動産・料理・ビジネスポートレート・ウェディングなど、熟練のプロが対応。',
+    icon: Camera,
   },
   {
-    key: 'food',
-    title: 'Food撮影',
-    plans: [
-      { name: '10メニュー', price: 15000, extra: '追加1メニュー 1,000円' },
-      { name: '15メニュー', price: 22000, extra: '追加1メニュー 1,000円' },
-      { name: '20メニュー', price: 28000, extra: '追加1メニュー 1,000円' },
-    ],
+    key: 'clean',
+    label: '清掃サービス',
+    desc: 'スタジオからご自宅まで、要件に合わせて丁寧にクリーニング。',
+    icon: ShieldCheck,
   },
   {
-    key: 'portrait',
-    title: 'ビジネスポートレート',
-    plans: [
-      { name: '20枚納品', price: 20000, extra: '追加1枚 1,000円' },
-      { name: '30枚納品', price: 29000, extra: '追加1枚 1,000円' },
-      { name: '40枚納品', price: 39000, extra: '追加1枚 1,000円' },
-    ],
-  },
-  {
-    key: 'wedding',
-    title: 'ウエディング撮影',
-    plans: [
-      { name: '20枚納品', price: 20000, extra: '追加1枚 1,000円' },
-      { name: '30枚納品', price: 29000, extra: '追加1枚 1,000円' },
-      { name: '40枚納品', price: 39000, extra: '追加1枚 1,000円' },
-    ],
+    key: 'staff',
+    label: '人材派遣ソリューション',
+    desc: 'イベントや長期案件に最適な人材を柔軟にアサイン。',
+    icon: Users,
   },
 ];
 
-const CLEAN_CATEGORIES: Category[] = [
-  { key: 'studio', title: 'Studio', plans: [{ name: 'Studio', price: 8000 }] },
-  { key: '1ldk', title: '1LDK', plans: [{ name: '1LDK', price: 12000 }] },
-  { key: '2ldk', title: '2LDK', plans: [{ name: '2LDK', price: 16000 }] },
-  { key: '3ldk', title: '3LDK', plans: [{ name: '3LDK', price: 20000 }] },
-];
-
-export default function ServicePage() {
+function useCurrentTab(): TabKey {
   const [sp] = useSearchParams();
-  const tab = sp.get('tab') ?? 'photo';
-  const navigate = useNavigate();
+  const t = sp.get('tab');
+  return (t === 'photo' || t === 'clean' || t === 'staff') ? (t as TabKey) : 'photo';
+}
 
-  const section = tab === 'clean' ? CLEAN_CATEGORIES : PHOTO_CATEGORIES;
-  const serviceLabel = tab === 'clean' ? 'お掃除サービス' : '写真撮影';
+export default function ServicePage(): JSX.Element {
+  const tab = useCurrentTab();
+  const active = useMemo(() => TABS.find(t => t.key === tab)!, [tab]);
 
   return (
-    <>
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-white">
       <Header />
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">{serviceLabel}</h1>
-          <nav className="flex gap-2">
-            <NavLink to="/services?tab=photo" className={({isActive}) => `px-3 py-2 rounded-lg ${tab==='photo' ? 'bg-gray-900 text-white' : 'hover:bg-gray-100'}`}>写真撮影</NavLink>
-            <NavLink to="/services?tab=clean" className={({isActive}) => `px-3 py-2 rounded-lg ${tab==='clean' ? 'bg-gray-900 text-white' : 'hover:bg-gray-100'}`}>お掃除</NavLink>
-            <NavLink to="/services?tab=staff" className="px-3 py-2 rounded-lg hover:bg-gray-100">人材派遣</NavLink>
-          </nav>
-        </div>
+      <main className="container mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 pt-10 pb-20">
+        {/* 見出し */}
+        <section className="mb-10">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 text-center">
+            プロフェッショナルサービス
+          </h1>
+          <p className="mt-3 text-center text-gray-600">
+            あなたのニーズに合わせた高品質なサービスをご提供します
+          </p>
+        </section>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          {section.map((cat) => (
-            <div key={cat.key} className="card p-6">
-              <h2 className="text-xl font-semibold mb-4">{cat.title}</h2>
-              <div className="grid sm:grid-cols-3 gap-4">
-                {cat.plans.map((p, idx) => (
-                  <button
-                    key={idx}
-                    className="border rounded-xl p-4 text-left hover:shadow-md transition group"
-                    onClick={() => navigate(`/order?service=${encodeURIComponent(serviceLabel)}&category=${encodeURIComponent(cat.title)}&plan=${encodeURIComponent(p.name)}&price=${p.price}`)}
-                  >
-                    <div className="font-semibold">{p.name}</div>
-                    <div className="text-gray-700 mt-1">{p.price.toLocaleString()}円</div>
-                    {p.extra && <div className="text-sm text-gray-500 mt-1">{p.extra}</div>}
-                    <div className="text-sm text-blue-600 mt-2 group-hover:underline">オーダーへ</div>
-                  </button>
-                ))}
+        {/* 3カード（既存リンク維持＆オーダーへ） */}
+        <section className="grid gap-6 md:grid-cols-3">
+          {TABS.map(({ key, label, desc, icon: Icon }) => (
+            <article
+              key={key}
+              className={`rounded-2xl border bg-white shadow-sm hover:shadow-md transition overflow-hidden ${
+                key === tab ? 'border-orange-300 ring-2 ring-orange-200' : 'border-gray-100'
+              }`}
+            >
+              <div className="h-48 w-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                <Icon className="h-10 w-10 text-gray-500" />
               </div>
-            </div>
+
+              <div className="p-6">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-9 w-9 rounded-xl bg-orange-100 items-center justify-center">
+                    <Icon className="h-5 w-5 text-orange-600" />
+                  </span>
+                  <h2 className="text-lg font-semibold text-gray-900">{label}</h2>
+                </div>
+                <p className="mt-2 text-gray-600">{desc}</p>
+
+                <div className="mt-4 flex items-center gap-3">
+                  {/* 既存のリンク仕様を維持 */}
+                  <Link
+                    to={`/services?tab=${key}`}
+                    className="inline-flex items-center gap-1 text-orange-600 hover:text-orange-700 text-sm font-medium"
+                  >
+                    詳細を見る →
+                  </Link>
+                  {/* オーダーへ（既存の /order を使用） */}
+                  <Link
+                    to={`/order?service=${key}`}
+                    className="btn-primary text-sm"
+                  >
+                    オーダーへ
+                  </Link>
+                </div>
+              </div>
+            </article>
           ))}
-        </div>
+        </section>
+
+        {/* タブ詳細（軽い説明＋CTA） */}
+        <section className="mt-10 rounded-2xl border border-gray-100 bg-white shadow-sm p-6">
+          <div className="flex items-center gap-3">
+            <active.icon className="h-6 w-6 text-orange-600" />
+            <h3 className="text-xl font-bold text-gray-900">{active.label}</h3>
+          </div>
+          <p className="mt-3 text-gray-700">{active.desc}</p>
+
+          <ul className="mt-4 list-disc pl-6 text-gray-700 space-y-1">
+            {tab === 'photo' && (
+              <>
+                <li>撮影場所・日時・目的を指定すると、近隣のカメラマンから順次オファー。</li>
+                <li>最初にOKしたプロとマッチング成立。</li>
+              </>
+            )}
+            {tab === 'clean' && (
+              <>
+                <li>規模や要件に応じて作業内容を最適化。立ち会い可否や備品の有無も事前確認。</li>
+                <li>近隣の清掃スタッフから順次オファー。</li>
+              </>
+            )}
+            {tab === 'staff' && (
+              <>
+                <li>イベント運営、受付、撮影アシスタントなど用途に応じて人材を手配。</li>
+                <li>人数・スキル・場所・時間を入力するだけで自動マッチング。</li>
+              </>
+            )}
+          </ul>
+
+          <div className="mt-6">
+            <Link to={`/order?service=${tab}`} className="btn-primary">
+              この内容でオーダーへ
+            </Link>
+          </div>
+        </section>
       </main>
-    </>
+    </div>
   );
 }
