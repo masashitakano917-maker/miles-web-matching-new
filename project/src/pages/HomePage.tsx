@@ -255,23 +255,6 @@ export default function HomePage() {
         </section>
       </main>
 
-      {/* ===== Footer ===== */}
-      <footer className="border-t bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-center">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <span className="w-12 h-12 rounded-2xl bg-orange-500 flex items-center justify-center">
-              <Camera className="h-6 w-6 text-white" />
-            </span>
-            <span className="text-3xl font-extrabold text-orange-500">Miles</span>
-          </div>
-          <p className="text-gray-600 text-sm">
-            © {new Date().getFullYear()} Miles. All rights reserved.
-          </p>
-        </div>
-      </footer>
-    </div>
-  );
-}
 
 /* ====== Sub components ====== */
 function Stat({
