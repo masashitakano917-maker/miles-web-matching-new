@@ -9,9 +9,12 @@ import ConfirmationPage from './pages/ConfirmationPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProfessionalsPage from './pages/admin/ProfessionalsPage';
-import ProfessionalsListPage from './pages/admin/ProfessionalsListPage'; // ★追加
+import ProfessionalsListPage from './pages/admin/ProfessionalsListPage';
 import ProfilePage from './pages/professional/ProfilePage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+
+// ★ 追加: 顧客の新規発注ページ
+import NewOrderPage from './pages/customer/NewOrderPage';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -44,6 +47,18 @@ export default function App() {
         <Route path="/order" element={<OrderPage />} />
         <Route path="/confirm" element={<ConfirmationPage />} />
 
+        {/* ★ 追加: 顧客がログイン後に使う本番用の新規発注ページ */}
+        <Route
+          path="/order/new"
+          element={
+            <RequireAuth>
+              <RequireRole role="customer">
+                <NewOrderPage />
+              </RequireRole>
+            </RequireAuth>
+          }
+        />
+
         <Route
           path="/dashboard"
           element={
@@ -75,7 +90,7 @@ export default function App() {
           }
         />
         <Route
-          path="/admin/professionals/list" // ★新規: 一覧ページ
+          path="/admin/professionals/list"
           element={
             <RequireAuth>
               <RequireRole role="admin">
@@ -84,9 +99,8 @@ export default function App() {
             </RequireAuth>
           }
         />
-        {/* ここに /admin/orders のページが別ファイルであれば同様に追加 */}
 
-        {/* Professional 本人ページ */}
+        {/* Professional */}
         <Route
           path="/professional/profile"
           element={
