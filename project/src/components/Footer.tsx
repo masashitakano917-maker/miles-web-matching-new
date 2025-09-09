@@ -24,7 +24,6 @@ export default function Footer() {
 
           <p className="text-xl md:text-2xl mb-8 opacity-90 leading-relaxed">
             Quick ideal matching for your needs
-            connections
           </p>
 
           <button
